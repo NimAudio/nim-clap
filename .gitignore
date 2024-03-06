@@ -1,0 +1,6 @@
+clap-main/*
+*/.DS_Store
+.DS_Store
+clap
+example_plugin
+!clap-main/clap_files_go_here.txt
