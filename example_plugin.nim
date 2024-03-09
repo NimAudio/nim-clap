@@ -12,34 +12,34 @@ type
 
 echo(CLAP_VERSION_MAJOR)
 
-let features: cstringArray = allocCStringArray([CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
+let features*: cstringArray = allocCStringArray([CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
                                                 CLAP_PLUGIN_FEATURE_EQUALIZER,
                                                 CLAP_PLUGIN_FEATURE_DISTORTION,
                                                 CLAP_PLUGIN_FEATURE_STEREO])
 
-let bgeq_plug_desc = ClapPluginDescriptor(
+let s_my_plug_desc* = ClapPluginDescriptor(
         clap_version: ClapVersion(
             major: CLAP_VERSION_MAJOR,
             minor: CLAP_VERSION_MINOR,
             revision: CLAP_VERSION_REVISION),
-        id: "com.unconventionalwaves.bonsai.geq",
-        name: "Bonsai Graphic EQ",
-        vendor: "Unconventional Waves",
-        url: "https://www.unconventionalwave.com/bonsai/geq",
-        manual_url: "https://www.unconventionalwave.com/bonsai/geq",
-        support_url: "https://www.unconventionalwave.com/bonsai/geq",
+        id: "com.nimclap.example",
+        name: "nim-clap example plugin",
+        vendor: "nim-clap",
+        url: "https://www.github.com/morganholly/nim-clap",
+        manual_url: "https://www.github.com/morganholly/nim-clap",
+        support_url: "https://www.github.com/morganholly/nim-clap",
         version: "0.6",
-        description: "highly nonlinear, 5 channel, 17 band graphic equalizer",
+        description: "example effect plugin",
         features: features)
 
-echo(bgeq_plug_desc.clap_version.minor)
-echo(bgeq_plug_desc.features[1])
+echo(s_my_plug_desc.clap_version.minor)
+echo(s_my_plug_desc.features[1])
 echo(CLAP_EXT_AUDIO_PORTS)
 
-proc my_plug_audio_ports_count(plugin: ptr ClapPlugin, is_input: bool): uint32 {.cdecl.} =
+proc my_plug_audio_ports_count*(plugin: ptr ClapPlugin, is_input: bool): uint32 {.cdecl.} =
     return 1
 
-proc my_plug_audio_ports_get(plugin: ptr ClapPlugin,
+proc my_plug_audio_ports_get*(plugin: ptr ClapPlugin,
                             index: uint32,
                             is_input: bool,
                             info: ptr ClapAudioPortInfo): bool {.cdecl.} =
@@ -53,37 +53,37 @@ proc my_plug_audio_ports_get(plugin: ptr ClapPlugin,
     info.in_place_pair = CLAP_INVALID_ID
     return true
 
-let s_my_plug_audio_ports = ClapPluginAudioPorts(count: my_plug_audio_ports_count, get: my_plug_audio_ports_get)
+let s_my_plug_audio_ports* = ClapPluginAudioPorts(count: my_plug_audio_ports_count, get: my_plug_audio_ports_get)
 
-proc my_plug_note_ports_count(plugin: ptr ClapPlugin, is_input: bool): uint32 {.cdecl.} =
+proc my_plug_note_ports_count*(plugin: ptr ClapPlugin, is_input: bool): uint32 {.cdecl.} =
     return 0
 
-proc my_plug_note_ports_get(plugin: ptr ClapPlugin,
+proc my_plug_note_ports_get*(plugin: ptr ClapPlugin,
                             index: uint32,
                             is_input: bool,
                             info: ptr ClapNotePortInfo): bool {.cdecl.} =
     return false
 
-let s_my_plug_note_ports = ClapPluginNotePorts(count: my_plug_note_ports_count, get: my_plug_note_ports_get)
+let s_my_plug_note_ports* = ClapPluginNotePorts(count: my_plug_note_ports_count, get: my_plug_note_ports_get)
 
-proc my_plug_latency_get(plugin: ptr ClapPlugin): uint32 {.cdecl.} =
+proc my_plug_latency_get*(plugin: ptr ClapPlugin): uint32 {.cdecl.} =
     return cast[ptr MyPlug](plugin.plugin_data).latency # TODO convince araq to add forward type declaration to nim
 
-let s_my_plug_latency = ClapPluginLatency(get: my_plug_latency_get)
+let s_my_plug_latency* = ClapPluginLatency(get: my_plug_latency_get)
 
-proc my_plug_state_save(plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.cdecl.} =
+proc my_plug_state_save*(plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.cdecl.} =
     var myplug = cast[ptr MyPlug](plugin.plugin_data)
     # TODO write state into stream
     return true
 
-proc my_plug_state_load(plugin: ptr ClapPlugin, stream: ptr ClapIStream): bool {.cdecl.} =
+proc my_plug_state_load*(plugin: ptr ClapPlugin, stream: ptr ClapIStream): bool {.cdecl.} =
     var myplug = cast[ptr MyPlug](plugin.plugin_data)
     # TODO write state into stream
     return true
 
-let s_my_plug_state = ClapPluginState(save: my_plug_state_save, load: my_plug_state_load)
+let s_my_plug_state* = ClapPluginState(save: my_plug_state_save, load: my_plug_state_load)
 
-proc my_plug_init(plugin: ptr ClapPlugin): bool {.cdecl.} =
+proc my_plug_init*(plugin: ptr ClapPlugin): bool {.cdecl.} =
     var myplug = cast[ptr MyPlug](plugin.plugin_data)
     myplug.host_log          = cast[ptr ClapHostLog         ](myplug.host.get_extension(myplug.host, CLAP_EXT_LOG          ))
     myplug.host_thread_check = cast[ptr ClapHostThreadCheck ](myplug.host.get_extension(myplug.host, CLAP_EXT_THREAD_CHECK ))
@@ -91,28 +91,28 @@ proc my_plug_init(plugin: ptr ClapPlugin): bool {.cdecl.} =
     myplug.host_state        = cast[ptr ClapHostState       ](myplug.host.get_extension(myplug.host, CLAP_EXT_STATE        ))
     return true
 
-proc my_plug_destroy(plugin: ptr ClapPlugin): void {.cdecl.} =
+proc my_plug_destroy*(plugin: ptr ClapPlugin): void {.cdecl.} =
     dealloc(cast[ptr MyPlug](plugin.plugin_data))
 
-proc my_plug_activate(plugin: ptr ClapPlugin,
+proc my_plug_activate*(plugin: ptr ClapPlugin,
                         sample_rate: float64,
                         min_frames_count: uint32,
                         max_frames_count: uint32): bool {.cdecl.} =
     return true
 
-proc my_plug_deactivate(plugin: ptr ClapPlugin): void =
+proc my_plug_deactivate*(plugin: ptr ClapPlugin): void {.cdecl.} =
     discard
 
-proc my_plug_start_processing(plugin: ptr ClapPlugin): bool =
+proc my_plug_start_processing*(plugin: ptr ClapPlugin): bool {.cdecl.} =
     return true
 
-proc my_plug_stop_processing(plugin: ptr ClapPlugin): void =
+proc my_plug_stop_processing*(plugin: ptr ClapPlugin): void {.cdecl.} =
     discard
 
-proc my_plug_reset(plugin: ptr ClapPlugin): void =
+proc my_plug_reset*(plugin: ptr ClapPlugin): void {.cdecl.} =
     discard
 
-proc my_plug_process_event(myplug: ptr MyPlug, event: ptr ClapEventUnion): void =
+proc my_plug_process_event*(myplug: ptr MyPlug, event: ptr ClapEventUnion): void {.cdecl.} =
     if event.kindNote.header.space_id == 0:
         case event.kindNote.header.event_type: # kindParamValMod for both, as the objects are identical
             of cetPARAM_VALUE: # actual knob changes or automation
@@ -122,7 +122,7 @@ proc my_plug_process_event(myplug: ptr MyPlug, event: ptr ClapEventUnion): void 
             else:
                 discard
 
-proc my_plug_process(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapProcessStatus =
+proc my_plug_process*(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapProcessStatus {.cdecl.} =
     var myplug = cast[ptr MyPlug](plugin.plugin_data)
     let num_frames: uint32 = process.frames_count
     let num_events: uint32 = process.in_events.size(process.in_events)
@@ -157,7 +157,7 @@ proc my_plug_process(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapProc
             i += 1
     return cpsCONTINUE
 
-proc my_plug_get_extension(plugin: ptr ClapPlugin, id: cstring): pointer =
+proc my_plug_get_extension*(plugin: ptr ClapPlugin, id: cstring): pointer {.cdecl.} =
     case id:
         of CLAP_EXT_LATENCY:
             return addr s_my_plug_latency
@@ -167,3 +167,24 @@ proc my_plug_get_extension(plugin: ptr ClapPlugin, id: cstring): pointer =
             return addr s_my_plug_note_ports
         of CLAP_EXT_STATE:
             return addr s_my_plug_state
+        # add CLAP_EXT_PARAMS
+
+proc my_plug_on_main_thread*(plugin: ptr ClapPlugin): void {.cdecl.} =
+    discard
+
+proc my_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
+    var myplug = cast[ptr MyPlug](alloc0(MyPlug.sizeof))
+    myplug.host = host
+    myplug.plugin.desc = addr s_my_plug_desc
+    myplug.plugin.plugin_data = myplug
+    myplug.plugin.init = my_plug_init
+    myplug.plugin.destroy = my_plug_destroy
+    myplug.plugin.activate = my_plug_activate
+    myplug.plugin.deactivate = my_plug_deactivate
+    myplug.plugin.start_processing = my_plug_start_processing
+    myplug.plugin.stop_processing = my_plug_stop_processing
+    myplug.plugin.reset = my_plug_reset
+    myplug.plugin.process = my_plug_process
+    myplug.plugin.get_extension = my_plug_get_extension
+    myplug.plugin.on_main_thread = my_plug_on_main_thread
+    return myplug.plugin

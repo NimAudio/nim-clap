@@ -52,7 +52,7 @@ type
 
     ClapPlugin* = ClapPluginT
     ClapPluginT* = object
-        desc             *: ClapPluginDescriptor
+        desc             *: ptr ClapPluginDescriptor
         plugin_data      *: pointer
 
         # Must be called after creating the plugin.
@@ -94,7 +94,7 @@ type
         # process audio, events, ...
         # All the pointers coming from clap_process_t and its nested attributes are valid until process() returns.
         # [audio-thread & active & processing]
-        process          *: proc (plugin: ptr ClapPlugin, process: ClapProcess): ClapProcessStatus {.cdecl.}
+        process          *: proc (plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapProcessStatus {.cdecl.}
 
         # Query an extension. The returned pointer is owned by the plugin.
         # It is forbidden to call it before plugin->init(). You can call it within plugin->init() call, and after.
