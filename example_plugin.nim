@@ -39,7 +39,7 @@ proc my_plug_audio_ports_get(plugin: ptr ClapPlugin,
     info.id = 0.ClapID
     echo(info.name)
     info.channel_count = 2
-    info.flags = {CLAP_AUDIO_PORT_IS_MAIN}
+    info.flags = {capfIS_MAIN}
     info.port_type = CLAP_PORT_STEREO
     info.in_place_pair = CLAP_INVALID_ID
     return true
@@ -103,4 +103,58 @@ proc my_plug_stop_processing(plugin: ptr ClapPlugin): void =
 proc my_plug_reset(plugin: ptr ClapPlugin): void =
     discard
 
-proc my_plug_process_event(myplug: MyPlug)
+proc my_plug_process_event(myplug: ptr MyPlug, event: ptr ClapEventUnion): void =
+    if event.kindNote.header.space_id == 0:
+        case event.kindNote.header.event_type: # kindParamValMod for both, as the objects are identical
+            of cetPARAM_VALUE: # actual knob changes or automation
+                discard
+            of cetPARAM_MOD: # per voice modulation
+                discard
+            else:
+                discard
+
+proc my_plug_process(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapProcessStatus =
+    var myplug = cast[ptr MyPlug](plugin.plugin_data)
+    let num_frames: uint32 = process.frames_count
+    let num_events: uint32 = process.in_events.size(process.in_events)
+    var event_idx: uint32 = 0
+    var next_event_frame: uint32 = if num_events > 0: 0 else: num_frames
+
+    var i: uint32 = 0
+    while i < num_frames:
+        while event_idx < num_events and next_event_frame == i:
+            let event: ptr ClapEventUnion = process.in_events.get(process.in_events, event_idx)
+            if event.kindNote.header.time != i:
+                next_event_frame = event.kindNote.header.time
+                break
+
+            my_plug_process_event(myplug, event)
+            event_idx += 1
+
+            if event_idx == num_events:
+                next_event_frame = num_frames
+                break
+
+        while i < next_event_frame:
+            let in_l: float32 = process.audio_inputs[0].data32[0][i]
+            let in_r: float32 = process.audio_inputs[0].data32[1][i]
+
+            let out_l = in_r * 0.5
+            let out_r = in_l
+
+            process.audio_outputs[0].data32[0][i] = out_l
+            process.audio_outputs[0].data32[1][i] = out_r
+
+            i += 1
+    return cpsCONTINUE
+
+proc my_plug_get_extension(plugin: ptr ClapPlugin, id: cstring): pointer =
+    case id:
+        of CLAP_EXT_LATENCY:
+            return addr s_my_plug_latency
+        of CLAP_EXT_AUDIO_PORTS:
+            return addr s_my_plug_audio_ports
+        of CLAP_EXT_NOTE_PORTS:
+            return addr s_my_plug_note_ports
+        of CLAP_EXT_STATE:
+            return addr s_my_plug_state
