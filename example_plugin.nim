@@ -1,5 +1,14 @@
 import clap
 
+type
+    MyPlug* = object
+        plugin            *: ptr ClapPlugin
+        host              *: ptr ClapHost
+        host_latency      *: ptr ClapHostLatency
+        host_log          *: ptr ClapHostLog
+        host_thread_check *: ptr ClapHostThreadCheck
+        host_state        *: ptr ClapHostState
+        latency           *: uint32
 
 echo(CLAP_VERSION_MAJOR)
 
