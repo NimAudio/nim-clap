@@ -188,3 +188,37 @@ proc my_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
     myplug.plugin.get_extension = my_plug_get_extension
     myplug.plugin.on_main_thread = my_plug_on_main_thread
     return myplug.plugin
+
+type
+    ClapDescCreate* = object
+        desc *: ptr ClapPluginDescriptor
+        create *: proc (host: ptr ClapHost): ptr ClapPlugin {.cdecl.}
+
+const plugin_count*: uint32 = 1
+
+let s_plugins: array[plugin_count, ClapDescCreate] = [
+    ClapDescCreate(desc: addr s_my_plug_desc, create: my_plug_create)
+]
+
+proc plugin_factory_get_plugin_count*(factory: ptr ClapPluginFactory): uint32 {.cdecl.} =
+    return plugin_count
+
+proc plugin_factory_get_plugin_descriptor*(factory: ptr ClapPluginFactory, index: uint32): ptr ClapPluginDescriptor {.cdecl.} =
+    return s_plugins[index].desc
+
+proc plugin_factory_create_plugin*(factory: ptr ClapPluginFactory,
+                                    host: ptr ClapHost,
+                                    plugin_id: cstring): ptr ClapPlugin {.cdecl.} =
+    if host.clap_version.major < 1:
+        return nil
+
+    for i in 0 ..< plugin_count:
+        if plugin_id == s_plugins[i].desc.id:
+            return s_plugins[i].create(host)
+
+    return nil
+
+let s_plugin_factory* = ClapPluginFactory(
+    get_plugin_count: plugin_factory_get_plugin_count,
+    get_plugin_descriptor: plugin_factory_get_plugin_descriptor,
+    create_plugin: plugin_factory_create_plugin)
