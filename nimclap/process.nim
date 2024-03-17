@@ -1,4 +1,4 @@
-import events
+import shared, events
 
 
 type
@@ -29,12 +29,6 @@ type
         audio_outputs_count *: uint32
         in_events           *: ptr ClapInputEvents
         out_events          *: ptr ClapOutputEvents
-
-    ClapVersion* = ClapVersionT
-    ClapVersionT* = object
-        major    *: uint32
-        minor    *: uint32
-        revision *: uint32
 
     ClapPluginDescriptor* = ClapPluginDescriptorT
     ClapPluginDescriptorT* = object

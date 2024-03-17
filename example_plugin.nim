@@ -2,7 +2,7 @@ import clap
 
 type
     MyPlug* = object
-        plugin            *: ptr ClapPlugin
+        plugin            *: ClapPlugin
         host              *: ptr ClapHost
         host_latency      *: ptr ClapHostLatency
         host_log          *: ptr ClapHostLog
@@ -175,6 +175,7 @@ proc my_plug_on_main_thread*(plugin: ptr ClapPlugin): void {.cdecl.} =
 proc my_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
     var myplug = cast[ptr MyPlug](alloc0(MyPlug.sizeof))
     myplug.host = host
+    # myplug.plugin = cast[ptr ClapPlugin](alloc0(ClapPlugin.sizeof))
     myplug.plugin.desc = addr s_my_plug_desc
     myplug.plugin.plugin_data = myplug
     myplug.plugin.init = my_plug_init
@@ -222,3 +223,43 @@ let s_plugin_factory* = ClapPluginFactory(
     get_plugin_count: plugin_factory_get_plugin_count,
     get_plugin_descriptor: plugin_factory_get_plugin_descriptor,
     create_plugin: plugin_factory_create_plugin)
+
+proc entry_init*(plugin_path: cstring): bool {.cdecl.} =
+    return true
+
+proc entry_deinit*(): void {.cdecl.} =
+    discard
+
+var g_entry_init_counter = 0
+
+proc entry_init_guard*(plugin_path: cstring): bool {.cdecl.} =
+    # add mutex lock
+    g_entry_init_counter += 1
+    var succeed = true
+    if g_entry_init_counter == 1:
+        succeed = entry_init(plugin_path)
+        if not succeed:
+            g_entry_init_counter = 0
+    # mutex unlock
+    return succeed
+
+proc entry_deinit_guard*(): void {.cdecl.} =
+    # add mutex lock
+    g_entry_init_counter -= 1
+    if g_entry_init_counter == 0:
+        entry_deinit()
+    # mutex unlock
+
+proc entry_get_factory*(factory_id: cstring): ptr ClapPluginFactory {.cdecl.} =
+    if g_entry_init_counter <= 0:
+        return nil
+    if factory_id == CLAP_PLUGIN_FACTORY_ID:
+        return addr s_plugin_factory
+    return nil
+
+let clap_entry* {.global, exportc: "clap_entry", dynlib.} = ClapPluginEntry(
+    clap_version: CLAP_VERSION_INIT,
+    init: entry_init_guard,
+    deinit: entry_deinit_guard,
+    get_factory: entry_get_factory
+)

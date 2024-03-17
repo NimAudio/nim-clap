@@ -1,13 +1,23 @@
 const
-    CLAP_VERSION_MAJOR    *: uint32 = 1
-    CLAP_VERSION_MINOR    *: uint32 = 2
-    CLAP_VERSION_REVISION *: uint32 = 0
-
-const
     CLAP_NAME_SIZE* = 256
     CLAP_PATH_SIZE* = 1024
 
-type ClapID* = distinct uint32
+type
+    ClapID* = distinct uint32
+
+    ClapVersion* = ClapVersionT
+    ClapVersionT* = object
+        major    *: uint32
+        minor    *: uint32
+        revision *: uint32
+
+const
+    CLAP_VERSION_MAJOR    *: uint32 = 1
+    CLAP_VERSION_MINOR    *: uint32 = 2
+    CLAP_VERSION_REVISION *: uint32 = 0
+    CLAP_VERSION_INIT     * = ClapVersion(major: CLAP_VERSION_MAJOR,
+                                            minor: CLAP_VERSION_MINOR,
+                                            revision: CLAP_VERSION_REVISION)
 
 const CLAP_INVALID_ID* = high(ClapID)
 
