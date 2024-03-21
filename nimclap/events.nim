@@ -1,18 +1,25 @@
 import shared
 
 type
-    ClapEventHeader* = ClapEventHeaderT
-    ClapEventHeaderT* = object
-        size       *: uint32        # event size including this header, eg: sizeof (clap_event_note)
-        time       *: uint32        # sample offset within the buffer for this event
-        space_id   *: uint32        # event space, see clap_host_event_registry
-        event_type *: ClapEventType # event type, originally named `type`
-        flags      *: uint32        # see clap_event_flags
-
     ClapEventFlag* {.size:sizeof(uint32).} = enum
         ceIS_LIVE,
         ceDONT_RECORD
-    ClapEventFlags* = set[ClapEventFlag]
+    ClapEventFlags* = distinct uint32
+
+converter conv_clap_event_flags*(flags: set[ClapEventFlag]): ClapEventFlags =
+    var res: uint32 = 0
+    for f in flags:
+        res = res or (2'u32 shl ord(f))
+    return ClapEventFlags(res)
+
+type
+    ClapEventHeader* = ClapEventHeaderT
+    ClapEventHeaderT* = object
+        size       *: uint32         # event size including this header, eg: sizeof (clap_event_note)
+        time       *: uint32         # sample offset within the buffer for this event
+        space_id   *: uint32         # event space, see clap_host_event_registry
+        event_type *: ClapEventType  # event type, originally named `type`
+        flags      *: ClapEventFlags
 
     ClapEventType* {.size:sizeof(uint32).} = enum
         cetNOTE_ON             = 0,  #

@@ -9,8 +9,27 @@ type
         cndMIDI,
         cndMIDI_MPE,
         cndMIDI2
-    ClapNoteDialectFlags* = set[ClapNoteDialectFlag]
+    ClapNoteDialectFlags* = distinct uint32
 
+converter conv_clap_note_dialect_flags*(flags: set[ClapNoteDialectFlag]): ClapNoteDialectFlags =
+    var res: uint32 = 0
+    for f in flags:
+        res = res or (2'u32 shl ord(f))
+    return ClapNoteDialectFlags(res)
+
+type
+    ClapNotePortRescanFlag* {.size:sizeof(uint32).} = enum
+        cnprALL,
+        cnprNAMES
+    ClapNotePortRescanFlags* = distinct uint32
+
+converter conv_clap_note_port_rescan_flags*(flags: set[ClapNotePortRescanFlag]): ClapNotePortRescanFlags =
+    var res: uint32 = 0
+    for f in flags:
+        res = res or (2'u32 shl ord(f))
+    return ClapNotePortRescanFlags(res)
+
+type
     ClapNotePortInfo* = ClapNotePortInfoT
     ClapNotePortInfoT* = object
         id                 *: ClapID
@@ -25,11 +44,6 @@ type
                         index: uint32,
                         is_input: bool,
                         info: ptr ClapNotePortInfo): bool {.cdecl.}
-
-    ClapNotePortRescanFlag* {.size:sizeof(uint32).} = enum
-        cnprALL,
-        cnprNAMES
-    ClapNotePortRescanFlags* = set[ClapNotePortRescanFlag]
 
     ClapHostNotePorts* = ClapHostNotePortsT
     ClapHostNotePortsT* = object
