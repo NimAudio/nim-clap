@@ -63,3 +63,12 @@ const
     CLAP_PLUGIN_FEATURE_STEREO            *: string = "stereo"
     CLAP_PLUGIN_FEATURE_SURROUND          *: string = "surround"
     CLAP_PLUGIN_FEATURE_AMBISONIC         *: string = "ambisonic"
+
+
+proc char_arr_name*(s: string): array[CLAP_NAME_SIZE, char] =
+    for i in 0..<min(CLAP_NAME_SIZE, s.len):
+        result[i] = s[i]
+
+proc char_arr_path*(s: string): array[CLAP_PATH_SIZE, char] =
+    for i in 0..<min(CLAP_PATH_SIZE, s.len):
+        result[i] = s[i]
