@@ -39,6 +39,7 @@ type
         host_log          *: ptr ClapHostLog
         host_thread_check *: ptr ClapHostThreadCheck
         host_state        *: ptr ClapHostState
+        host_params       *: ptr ClapHostParams
         latency           *: uint32
         ui_controls       *: ControlValues
         dsp_controls      *: ControlValues
@@ -244,23 +245,23 @@ proc my_plug_reset*(plugin: ptr ClapPlugin): void {.cdecl.} =
     discard
 
 proc my_plug_process_event*(myplug: ptr MyPlug, event: ptr ClapEventUnion): void {.cdecl.} =
-    if event.kindNote.header.space_id == 0:
-        case event.kindNote.header.event_type: # kindParamValMod for both, as the objects are identical
-            of cetPARAM_VALUE: # actual knob changes or automation
-                withLock(myplug.controls_mutex):
-                    case event.kindParamValMod.param_id:
-                        of ClapID(0):
-                            myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
-                        of ClapID(1):
-                            myplug.dsp_controls.flip = float32(event.kindParamValMod.val_amt)
-                        of ClapID(2):
-                            myplug.dsp_controls.rotate = float32(event.kindParamValMod.val_amt)
-                        else:
-                            discard
-            of cetPARAM_MOD: # per voice modulation
-                discard
-            else:
-                discard
+    # if event.kindNote.header.space_id == 0:
+    case event.kindNote.header.event_type: # kindParamValMod for both, as the objects are identical
+        of cetPARAM_VALUE: # actual knob changes or automation
+            withLock(myplug.controls_mutex):
+                case event.kindParamValMod.param_id:
+                    of ClapID(0):
+                        myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
+                    of ClapID(1):
+                        myplug.dsp_controls.flip = float32(event.kindParamValMod.val_amt)
+                    of ClapID(2):
+                        myplug.dsp_controls.rotate = float32(event.kindParamValMod.val_amt)
+                    else:
+                        discard
+        of cetPARAM_MOD: # per voice modulation
+            discard
+        else:
+            discard
 
 proc db_af*(db: float32): float32 =
     result = pow(10, 0.05 * db)
@@ -339,12 +340,12 @@ proc my_plug_process*(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapPro
 proc my_plug_params_count*(plugin: ptr ClapPlugin): uint32 {.cdecl.} =
     return 3
 
-proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information: var ptr ClapParamInfo): bool {.cdecl.} =
+proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information: ptr ClapParamInfo): bool {.cdecl.} =
     case index:
         of 0: # level
-            var info = ClapParamInfo(
+            information[] = ClapParamInfo(
                 id            : ClapID(0),
-                flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE},
+                flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE, cpiREQUIRES_PROCESS},
                 cookie        : nil,
                 name          : char_arr_name("Level"),
                 module        : char_arr_name(""),
@@ -352,11 +353,10 @@ proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information
                 max_value     : 24.0,
                 default_value : 0.0
             )
-            information = addr info
         of 1: # flip
-            var info = ClapParamInfo(
+            information[] = ClapParamInfo(
                 id            : ClapID(1),
-                flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE},
+                flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE, cpiREQUIRES_PROCESS},
                 cookie        : nil,
                 name          : char_arr_name("Flip"),
                 module        : char_arr_name(""),
@@ -364,11 +364,10 @@ proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information
                 max_value     : 1.0,
                 default_value : 0.0
             )
-            information = addr info
         of 2: # rotate
-            var info = ClapParamInfo(
+            information[] = ClapParamInfo(
                 id            : ClapID(2),
-                flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE},
+                flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE, cpiREQUIRES_PROCESS},
                 cookie        : nil,
                 name          : char_arr_name("Rotate"),
                 module        : char_arr_name(""),
@@ -376,7 +375,6 @@ proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information
                 max_value     : pi,
                 default_value : 0.0
             )
-            information = addr info
         else:
             return false
     return true
@@ -404,31 +402,27 @@ proc my_plug_params_get_value*(plugin: ptr ClapPlugin, id: ClapID, value: ptr fl
                 return false
     return true
 
-proc my_plug_params_value_to_text*(plugin: ptr ClapPlugin, id: ClapID, value: float64, display: var cstring, size: uint32): bool {.cdecl.} =
+template str_to_char_arr_ptr*(write: ptr UncheckedArray[char], read: string, write_size: uint32): void =
+    let min_len = min(write_size, uint32(read.len))
+    var i: uint32 = 0
+    while i < min_len:
+        write[i] = read[i]
+        i += 1
+    write[i] = '\0'
+
+proc my_plug_params_value_to_text*(plugin: ptr ClapPlugin, id: ClapID, value: float64, display: ptr UncheckedArray[char], size: uint32): bool {.cdecl.} =
     case id:
         of ClapID(0):
-            var str: string = $af_db(value) & " db"
-            if uint32(str.len) < size:
-                display = cstring(str)
-            else:
-                display = cstring(str[0..size])
+            str_to_char_arr_ptr(display, $af_db(value) & " db", size)
         of ClapID(1):
-            var str: string = $value
-            if uint32(str.len) < size:
-                display = cstring(str)
-            else:
-                display = cstring(str[0..size])
+            str_to_char_arr_ptr(display, $value, size)
         of ClapID(2):
-            var str: string = $value
-            if uint32(str.len) < size:
-                display = cstring(str)
-            else:
-                display = cstring(str[0..size])
+            str_to_char_arr_ptr(display, $value, size)
         else:
             return false
     return true
 
-proc my_plug_params_text_to_value*(plugin: ptr ClapPlugin, id: ClapID, display: cstring, value: var ptr float64): bool {.cdecl.} =
+proc my_plug_params_text_to_value*(plugin: ptr ClapPlugin, id: ClapID, display: cstring, value: ptr float64): bool {.cdecl.} =
     case id:
         of ClapID(0):
             value[] = float64(db_af(parseFloat(($display).strip().split(" ")[0])))
@@ -470,6 +464,7 @@ proc my_plug_init*(plugin: ptr ClapPlugin): bool {.cdecl.} =
     myplug.host_thread_check = cast[ptr ClapHostThreadCheck ](myplug.host.get_extension(myplug.host, CLAP_EXT_THREAD_CHECK ))
     myplug.host_latency      = cast[ptr ClapHostLatency     ](myplug.host.get_extension(myplug.host, CLAP_EXT_LATENCY      ))
     myplug.host_state        = cast[ptr ClapHostState       ](myplug.host.get_extension(myplug.host, CLAP_EXT_STATE        ))
+    myplug.host_params       = cast[ptr ClapHostParams      ](myplug.host.get_extension(myplug.host, CLAP_EXT_PARAMS       ))
     return true
 
 proc my_plug_destroy*(plugin: ptr ClapPlugin): void {.cdecl.} =

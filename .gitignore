@@ -6,3 +6,5 @@ example_plugin
 !clap-main/clap_files_go_here.txt
 */*.clap
 *.clap
+Backups/*
+reaper_test.RPP

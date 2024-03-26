@@ -164,7 +164,7 @@ type
             # Returns true on success. [main-thread]
         get_info      *: proc (plugin:   ptr ClapPlugin,
                             param_index: uint32,
-                            param_info:  var ptr ClapParamInfo): bool {.cdecl.}
+                            param_info:  ptr ClapParamInfo): bool {.cdecl.}
 
             # Writes the parameter's current value to out_value.
             # Returns true on success. [main-thread]
@@ -180,7 +180,7 @@ type
         value_to_text *: proc (plugin:               ptr ClapPlugin,
                                 param_id:            ClapID,
                                 value:               float64,
-                                out_buffer:          var cstring,
+                                out_buffer:          ptr UncheckedArray[char],
                                 out_buffer_capacity: uint32): bool {.cdecl.}
 
             # Converts the null-terminated UTF-8 param_value_text into a double and writes it to out_value.
@@ -189,7 +189,7 @@ type
         text_to_value *: proc (plugin   : ptr ClapPlugin,
                                 id      : ClapID,
                                 display : cstring,
-                                value   : var ptr float64): bool {.cdecl.}
+                                value   : ptr float64): bool {.cdecl.}
 
             # Flushes a set of parameter changes.
             # This method must not be called concurrently to clap_plugin->process().
