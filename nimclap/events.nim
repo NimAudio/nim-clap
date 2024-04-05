@@ -9,7 +9,7 @@ type
 converter conv_clap_event_flags*(flags: set[ClapEventFlag]): ClapEventFlags =
     var res: uint32 = 0
     for f in flags:
-        res = res or (2'u32 shl ord(f))
+        res = res or (1'u32 shl ord(f))
     return ClapEventFlags(res)
 
 type

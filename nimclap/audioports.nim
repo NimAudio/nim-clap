@@ -17,7 +17,7 @@ type
 converter conv_clap_audio_port_flags*(flags: set[ClapAudioPortFlag]): ClapAudioPortFlags =
     var res: uint32 = 0
     for f in flags:
-        res = res or (2'u32 shl ord(f))
+        res = res or (1'u32 shl ord(f))
     return ClapAudioPortFlags(res)
 
 type
@@ -33,7 +33,7 @@ type
 converter conv_clap_audio_port_rescan_flags*(flags: set[ClapAudioPortRescanFlag]): ClapAudioPortRescanFlags =
     var res: uint32 = 0
     for f in flags:
-        res = res or (2'u32 shl ord(f))
+        res = res or (1'u32 shl ord(f))
     return ClapAudioPortRescanFlags(res)
 
 type

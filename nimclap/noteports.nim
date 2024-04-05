@@ -14,7 +14,7 @@ type
 converter conv_clap_note_dialect_flags*(flags: set[ClapNoteDialectFlag]): ClapNoteDialectFlags =
     var res: uint32 = 0
     for f in flags:
-        res = res or (2'u32 shl ord(f))
+        res = res or (1'u32 shl ord(f))
     return ClapNoteDialectFlags(res)
 
 type
@@ -26,7 +26,7 @@ type
 converter conv_clap_note_port_rescan_flags*(flags: set[ClapNotePortRescanFlag]): ClapNotePortRescanFlags =
     var res: uint32 = 0
     for f in flags:
-        res = res or (2'u32 shl ord(f))
+        res = res or (1'u32 shl ord(f))
     return ClapNotePortRescanFlags(res)
 
 type

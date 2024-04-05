@@ -46,7 +46,7 @@ type
 converter conv_clap_param_info_flags*(flags: set[ClapParamInfoFlag]): ClapParamInfoFlags =
     var res: uint32 = 0
     for f in flags:
-        res = res or (2'u32 shl ord(f))
+        res = res or (1'u32 shl ord(f))
     return ClapParamInfoFlags(res)
 
 type
@@ -93,7 +93,7 @@ type
 converter conv_clap_param_rescan_flags*(flags: set[ClapParamRescanFlag]): ClapParamRescanFlags =
     var res: uint32 = 0
     for f in flags:
-        res = res or (2'u32 shl ord(f))
+        res = res or (1'u32 shl ord(f))
     return ClapParamRescanFlags(res)
 
 type
@@ -106,7 +106,7 @@ type
 converter conv_clap_param_clear_flags*(flags: set[ClapParamClearFlag]): ClapParamClearFlags =
     var res: uint32 = 0
     for f in flags:
-        res = res or (2'u32 shl ord(f))
+        res = res or (1'u32 shl ord(f))
     return ClapParamClearFlags(res)
 
 type
