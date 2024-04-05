@@ -17,11 +17,11 @@ type
     ClapEventHeaderT* = object
         size       *: uint32         # event size including this header, eg: sizeof (clap_event_note)
         time       *: uint32         # sample offset within the buffer for this event
-        space_id   *: uint32         # event space, see clap_host_event_registry
+        space_id   *: uint16         # event space, see clap_host_event_registry
         event_type *: ClapEventType  # event type, originally named `type`
         flags      *: ClapEventFlags
 
-    ClapEventType* {.size:sizeof(uint32).} = enum
+    ClapEventType* {.size:sizeof(uint16).} = enum
         cetNOTE_ON             = 0,  #
         cetNOTE_OFF            = 1,  #
         cetNOTE_CHOKE          = 2,  #
@@ -102,6 +102,7 @@ type
     #     ctIS_WITHIN_PRE_ROLL
     # ClapTransportFlags* = set[ClapTransportFlag]
     # oops i forgot i wasn't implementing transport yet
+    # needs to be modified to be like the other flags
 
     ClapEventMidi* = ClapEventMidiT
     ClapEventMidiT* = object
