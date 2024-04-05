@@ -245,23 +245,24 @@ proc my_plug_reset*(plugin: ptr ClapPlugin): void {.cdecl.} =
     discard
 
 proc my_plug_process_event*(myplug: ptr MyPlug, event: ptr ClapEventUnion): void {.cdecl.} =
+    myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
     # if event.kindNote.header.space_id == 0:
-    case event.kindNote.header.event_type: # kindParamValMod for both, as the objects are identical
-        of cetPARAM_VALUE: # actual knob changes or automation
-            withLock(myplug.controls_mutex):
-                case event.kindParamValMod.param_id:
-                    of ClapID(0):
-                        myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
-                    of ClapID(1):
-                        myplug.dsp_controls.flip = float32(event.kindParamValMod.val_amt)
-                    of ClapID(2):
-                        myplug.dsp_controls.rotate = float32(event.kindParamValMod.val_amt)
-                    else:
-                        discard
-        of cetPARAM_MOD: # per voice modulation
-            discard
-        else:
-            discard
+    #     case event.kindNote.header.event_type: # kindParamValMod for both, as the objects are identical
+    #         of cetPARAM_VALUE: # actual knob changes or automation
+    #             withLock(myplug.controls_mutex):
+    #                 case event.kindParamValMod.param_id:
+    #                     of ClapID(0):
+    #                         myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
+    #                     of ClapID(1):
+    #                         myplug.dsp_controls.flip = float32(event.kindParamValMod.val_amt)
+    #                     of ClapID(2):
+    #                         myplug.dsp_controls.rotate = float32(event.kindParamValMod.val_amt)
+    #                     else:
+    #                         discard
+    #         of cetPARAM_MOD: # per voice modulation
+    #             discard
+    #         else:
+    #             discard
 
 proc db_af*(db: float32): float32 =
     result = pow(10, 0.05 * db)
@@ -293,6 +294,20 @@ proc my_plug_process*(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapPro
             if event.kindNote.header.time != i:
                 next_event_frame = event.kindNote.header.time
                 break
+
+            # if event != nil: # crashes, idk what to do for logs
+            #     var file = open("/Users/alix/Documents/GitHub/nim-clap/log.txt", fmAppend)
+            #     try:
+            #         file.write(event.kindParamValMod.header.space_id)
+            #         file.write(" ")
+            #         file.write(event.kindParamValMod.header.event_type)
+            #         file.write(" ")
+            #         file.write(event.kindParamValMod.param_id)
+            #         file.write(" ")
+            #         file.write(event.kindParamValMod.val_amt)
+            #         file.write("\n")
+            #     finally:
+            #         close(file)
 
             my_plug_process_event(myplug, event)
             event_idx += 1
@@ -377,7 +392,7 @@ proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information
             )
         else:
             return false
-    return true
+    return information.min_value != 0 or information.max_value != 0
 
 proc my_plug_params_get_value*(plugin: ptr ClapPlugin, id: ClapID, value: ptr float64): bool {.cdecl.} =
     var myplug = cast[ptr MyPlug](plugin.plugin_data)
@@ -413,7 +428,8 @@ template str_to_char_arr_ptr*(write: ptr UncheckedArray[char], read: string, wri
 proc my_plug_params_value_to_text*(plugin: ptr ClapPlugin, id: ClapID, value: float64, display: ptr UncheckedArray[char], size: uint32): bool {.cdecl.} =
     case id:
         of ClapID(0):
-            str_to_char_arr_ptr(display, $af_db(value) & " db", size)
+            # str_to_char_arr_ptr(display, $af_db(value) & " db", size)
+            str_to_char_arr_ptr(display, $value & " db", size)
         of ClapID(1):
             str_to_char_arr_ptr(display, $value, size)
         of ClapID(2):
@@ -425,7 +441,7 @@ proc my_plug_params_value_to_text*(plugin: ptr ClapPlugin, id: ClapID, value: fl
 proc my_plug_params_text_to_value*(plugin: ptr ClapPlugin, id: ClapID, display: cstring, value: ptr float64): bool {.cdecl.} =
     case id:
         of ClapID(0):
-            value[] = float64(db_af(parseFloat(($display).strip().split(" ")[0])))
+            value[] = float64(parseFloat(($display).strip().split(" ")[0]))
         of ClapID(1):
             value[] = float64(parseFloat($display))
         of ClapID(2):
@@ -465,6 +481,19 @@ proc my_plug_init*(plugin: ptr ClapPlugin): bool {.cdecl.} =
     myplug.host_latency      = cast[ptr ClapHostLatency     ](myplug.host.get_extension(myplug.host, CLAP_EXT_LATENCY      ))
     myplug.host_state        = cast[ptr ClapHostState       ](myplug.host.get_extension(myplug.host, CLAP_EXT_STATE        ))
     myplug.host_params       = cast[ptr ClapHostParams      ](myplug.host.get_extension(myplug.host, CLAP_EXT_PARAMS       ))
+    var level : float32 = 1
+    var flip  : float32 = 0
+    var rotate: float32 = 0
+    myplug.audio_data.smoothed_level  = level
+    myplug.audio_data.smoothed_flip   = flip
+    myplug.audio_data.smoothed_rotate = rotate
+    myplug.dsp_controls.level         = level
+    myplug.dsp_controls.flip          = flip
+    myplug.dsp_controls.rotate        = rotate
+    myplug.ui_controls.level          = level
+    myplug.ui_controls.flip           = flip
+    myplug.ui_controls.rotate         = rotate
+    initLock(myplug.controls_mutex)
     return true
 
 proc my_plug_destroy*(plugin: ptr ClapPlugin): void {.cdecl.} =
@@ -514,20 +543,6 @@ proc my_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
     myplug.plugin.process = my_plug_process
     myplug.plugin.get_extension = my_plug_get_extension
     myplug.plugin.on_main_thread = my_plug_on_main_thread
-    # myplug.controls = ControlValues()
-    var level : float32 = 1
-    var flip  : float32 = 0
-    var rotate: float32 = 0
-    myplug.audio_data.smoothed_level  = level
-    myplug.audio_data.smoothed_flip   = flip
-    myplug.audio_data.smoothed_rotate = rotate
-    myplug.dsp_controls.level         = level
-    myplug.dsp_controls.flip          = flip
-    myplug.dsp_controls.rotate        = rotate
-    myplug.ui_controls.level          = level
-    myplug.ui_controls.flip           = flip
-    myplug.ui_controls.rotate         = rotate
-    initLock(myplug.controls_mutex)
     return addr myplug.plugin
 
 type

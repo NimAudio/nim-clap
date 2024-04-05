@@ -8,3 +8,4 @@ example_plugin
 *.clap
 Backups/*
 reaper_test.RPP
+*.dSYM
