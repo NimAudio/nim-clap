@@ -66,9 +66,19 @@ const
 
 
 proc char_arr_name*(s: string): array[CLAP_NAME_SIZE, char] =
-    for i in 0..<min(CLAP_NAME_SIZE, s.len):
-        result[i] = s[i]
+    if s.len == 0:
+        result[0] = '\0'
+    else:
+        let smaller = min(CLAP_NAME_SIZE, s.len)
+        for i in 0 ..< smaller:
+            result[i] = s[i]
+        result[smaller] = '\0'
 
 proc char_arr_path*(s: string): array[CLAP_PATH_SIZE, char] =
-    for i in 0..<min(CLAP_PATH_SIZE, s.len):
-        result[i] = s[i]
+    if s.len == 0:
+        result[0] = '\0'
+    else:
+        let smaller = min(CLAP_PATH_SIZE, s.len)
+        for i in 0 ..< smaller:
+            result[i] = s[i]
+        result[smaller] = '\0'

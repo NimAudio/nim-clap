@@ -87,7 +87,7 @@ proc simple_lp(smooth: var float32, coef: float32, next: float32): var float32 =
     smooth += coef * (next - smooth)
     return smooth
 
-echo(CLAP_VERSION_MAJOR)
+# echo(CLAP_VERSION_MAJOR)
 
 let features*: cstringArray = allocCStringArray([CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
                                                 CLAP_PLUGIN_FEATURE_EQUALIZER,
@@ -109,9 +109,18 @@ let s_my_plug_desc* = ClapPluginDescriptor(
         description: "example effect plugin",
         features: features)
 
-echo(s_my_plug_desc.clap_version.minor)
-echo(s_my_plug_desc.features[1])
-echo(CLAP_EXT_AUDIO_PORTS)
+# echo(s_my_plug_desc.clap_version.minor)
+# echo(s_my_plug_desc.features[1])
+# echo(CLAP_EXT_AUDIO_PORTS)
+
+# echo(ClapEventUnion.sizeof)
+# echo(ClapEventNote.sizeof)
+# echo(ClapEventNoteExpression.sizeof)
+# echo(ClapEventParamValue.sizeof)
+# echo(ClapEventParamGesture.sizeof)
+# echo(ClapEventMidi.sizeof)
+# echo(ClapEventMidiSysex.sizeof)
+# echo(ClapEventMidi2.sizeof)
 
 #93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
 #93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
@@ -245,24 +254,24 @@ proc my_plug_reset*(plugin: ptr ClapPlugin): void {.cdecl.} =
     discard
 
 proc my_plug_process_event*(myplug: ptr MyPlug, event: ptr ClapEventUnion): void {.cdecl.} =
-    myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
-    # if event.kindNote.header.space_id == 0:
-    #     case event.kindNote.header.event_type: # kindParamValMod for both, as the objects are identical
-    #         of cetPARAM_VALUE: # actual knob changes or automation
-    #             withLock(myplug.controls_mutex):
-    #                 case event.kindParamValMod.param_id:
-    #                     of ClapID(0):
-    #                         myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
-    #                     of ClapID(1):
-    #                         myplug.dsp_controls.flip = float32(event.kindParamValMod.val_amt)
-    #                     of ClapID(2):
-    #                         myplug.dsp_controls.rotate = float32(event.kindParamValMod.val_amt)
-    #                     else:
-    #                         discard
-    #         of cetPARAM_MOD: # per voice modulation
-    #             discard
-    #         else:
-    #             discard
+    # myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
+    if event.kindNote.header.space_id == 0:
+        case event.kindNote.header.event_type: # kindParamValMod for both, as the objects are identical
+            of cetPARAM_VALUE: # actual knob changes or automation
+                withLock(myplug.controls_mutex):
+                    case event.kindParamValMod.param_id:
+                        of ClapID(0):
+                            myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
+                        of ClapID(1):
+                            myplug.dsp_controls.flip = float32(event.kindParamValMod.val_amt)
+                        of ClapID(2):
+                            myplug.dsp_controls.rotate = float32(event.kindParamValMod.val_amt)
+                        else:
+                            discard
+            of cetPARAM_MOD: # per voice modulation
+                discard
+            else:
+                discard
 
 proc db_af*(db: float32): float32 =
     result = pow(10, 0.05 * db)
@@ -295,20 +304,8 @@ proc my_plug_process*(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapPro
                 next_event_frame = event.kindNote.header.time
                 break
 
-            # if event != nil: # crashes, idk what to do for logs
-            #     var file = open("/Users/alix/Documents/GitHub/nim-clap/log.txt", fmAppend)
-            #     try:
-            #         file.write(event.kindParamValMod.header.space_id)
-            #         file.write(" ")
-            #         file.write(event.kindParamValMod.header.event_type)
-            #         file.write(" ")
-            #         file.write(event.kindParamValMod.param_id)
-            #         file.write(" ")
-            #         file.write(event.kindParamValMod.val_amt)
-            #         file.write("\n")
-            #     finally:
-            #         close(file)
-
+            # if event.kindNote.header.event_type == cetPARAM_VALUE:
+            #     event.kindParamValMod.val_amt = 1
             my_plug_process_event(myplug, event)
             event_idx += 1
 
@@ -318,7 +315,7 @@ proc my_plug_process*(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapPro
 
         while i < next_event_frame:
             discard myplug.audio_data.smoothed_level
-                        .simple_lp(myplug.smooth_coef, myplug.dsp_controls.level)
+                        .simple_lp(myplug.smooth_coef, db_af(myplug.dsp_controls.level))
             discard myplug.audio_data.smoothed_flip
                         .simple_lp(myplug.smooth_coef, myplug.dsp_controls.flip)
             discard myplug.audio_data.smoothed_rotate
@@ -363,7 +360,7 @@ proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information
                 flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE, cpiREQUIRES_PROCESS},
                 cookie        : nil,
                 name          : char_arr_name("Level"),
-                module        : char_arr_name(""),
+                module        : char_arr_path(""),
                 min_value     : -48.0,
                 max_value     : 24.0,
                 default_value : 0.0
@@ -374,7 +371,7 @@ proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information
                 flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE, cpiREQUIRES_PROCESS},
                 cookie        : nil,
                 name          : char_arr_name("Flip"),
-                module        : char_arr_name(""),
+                module        : char_arr_path(""),
                 min_value     : 0.0,
                 max_value     : 1.0,
                 default_value : 0.0
@@ -385,7 +382,7 @@ proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information
                 flags         : {cpiIS_AUTOMATABLE, cpiIS_MODULATABLE, cpiREQUIRES_PROCESS},
                 cookie        : nil,
                 name          : char_arr_name("Rotate"),
-                module        : char_arr_name(""),
+                module        : char_arr_path(""),
                 min_value     : -pi,
                 max_value     : pi,
                 default_value : 0.0

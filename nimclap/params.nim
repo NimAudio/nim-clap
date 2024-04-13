@@ -149,7 +149,7 @@ type
 
             # The module path containing the param, eg: "Oscillators/Wavetable 1".
             # '/' will be used as a separator to show a tree-like structure.
-        module        *: array[CLAP_NAME_SIZE, char]
+        module        *: array[CLAP_PATH_SIZE, char]
 
         min_value     *: float64 # Minimum plain value
         max_value     *: float64 # Maximum plain value
