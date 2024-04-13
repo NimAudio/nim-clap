@@ -319,21 +319,21 @@ proc my_plug_process*(plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapPro
             discard myplug.audio_data.smoothed_flip
                         .simple_lp(myplug.smooth_coef, myplug.dsp_controls.flip)
             discard myplug.audio_data.smoothed_rotate
-                        .simple_lp(myplug.smooth_coef, myplug.dsp_controls.rotate)
+                        .simple_lp(myplug.smooth_coef, pi * myplug.dsp_controls.rotate)
 
             let in_l: float32 = process.audio_inputs[0].data32[0][i]
             let in_r: float32 = process.audio_inputs[0].data32[1][i]
 
             # let out_l = in_r * 0.5
             # let out_r = in_l
-            var out_l = myplug.audio_data.smoothed_level * in_l
-            var out_r = myplug.audio_data.smoothed_level * in_r
-            out_l = lerp(out_l, out_r, myplug.audio_data.smoothed_flip)
-            out_r = lerp(out_r, out_l, myplug.audio_data.smoothed_flip)
+            var scaled_l = myplug.audio_data.smoothed_level * in_l
+            var scaled_r = myplug.audio_data.smoothed_level * in_r
+            var flipped_l = lerp(scaled_l, scaled_r, myplug.audio_data.smoothed_flip)
+            var flipped_r = lerp(scaled_r, scaled_l, myplug.audio_data.smoothed_flip)
             let a_cos: float32 = cos(myplug.audio_data.smoothed_rotate)
             let a_sin: float32 = sin(myplug.audio_data.smoothed_rotate)
-            out_l = out_l * a_cos + out_r * a_sin
-            out_l = out_r * a_cos - out_l * a_sin
+            var out_l = flipped_l * a_cos + flipped_r * a_sin
+            var out_r = flipped_r * a_cos - flipped_l * a_sin
 
             process.audio_outputs[0].data32[0][i] = out_l
             process.audio_outputs[0].data32[1][i] = out_r
@@ -383,8 +383,8 @@ proc my_plug_params_get_info*(plugin: ptr ClapPlugin, index: uint32, information
                 cookie        : nil,
                 name          : char_arr_name("Rotate"),
                 module        : char_arr_path(""),
-                min_value     : -pi,
-                max_value     : pi,
+                min_value     : -1.0,
+                max_value     : 1.0,
                 default_value : 0.0
             )
         else:
@@ -422,15 +422,31 @@ template str_to_char_arr_ptr*(write: ptr UncheckedArray[char], read: string, wri
         i += 1
     write[i] = '\0'
 
+# proc float_prettify*(f: float, digits: int): string =
+#     result = ""
+#     var s = $round(f, digits)
+#     let smaller = min(digits, s.len)
+#     for i in 0 ..< smaller:
+#         result &= s[i]
+#     # result[smaller] = '\0'
+#     # return ($round(f, c))[0 .. c]
+#     # $round(f * float(1 shl digits))
+
+# echo(0.2)
+# echo(float_prettify(0.2, 8))
+
 proc my_plug_params_value_to_text*(plugin: ptr ClapPlugin, id: ClapID, value: float64, display: ptr UncheckedArray[char], size: uint32): bool {.cdecl.} =
     case id:
         of ClapID(0):
             # str_to_char_arr_ptr(display, $af_db(value) & " db", size)
-            str_to_char_arr_ptr(display, $value & " db", size)
+            # str_to_char_arr_ptr(display, float_prettify(value, 8) & " db", size)
+            str_to_char_arr_ptr(display, value.formatBiggestFloat(ffDecimal, 6) & " db", size)
         of ClapID(1):
-            str_to_char_arr_ptr(display, $value, size)
+            # str_to_char_arr_ptr(display, float_prettify(value, 8), size)
+            str_to_char_arr_ptr(display, value.formatBiggestFloat(ffDecimal, 6), size)
         of ClapID(2):
-            str_to_char_arr_ptr(display, $value, size)
+            # str_to_char_arr_ptr(display, float_prettify(value, 8), size)
+            str_to_char_arr_ptr(display, value.formatBiggestFloat(ffDecimal, 6), size)
         else:
             return false
     return true

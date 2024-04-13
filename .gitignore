@@ -1,6 +1,5 @@
 */.DS_Store
 .DS_Store
-clap
 clap-main/*
 !clap-main/clap_files_go_here.txt
 Backups/*
@@ -10,8 +9,8 @@ reaper_test.RPP
 bitwig_test/*
 
 
-
 example_plugin
+example
 */*.clap
 *.clap
 *.dSYM
