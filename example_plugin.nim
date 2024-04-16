@@ -1,4 +1,4 @@
-import clap
+import src/clap
 import std/[locks, math, strutils]
 
 type
@@ -18,9 +18,9 @@ type
     #     buffer  *: ptr array[2048, EventMessage]
     #     id_info *: ptr UncheckedArray[EventIDInfo]
 
-    Changed*[T] = object
-        changed *: bool
-        value   *: T
+    # Changed*[T] = object
+    #     changed *: bool
+    #     value   *: T
 
     ControlValues* = object
         level  *: Changed[float32]
@@ -48,18 +48,18 @@ type
         smooth_coef       *: float32
         sample_rate       *: float64
 
-converter changeable*[T](value: T): Changed[T] =
-    result = Changed[T](changed: true, value: value)
+# converter changeable*[T](value: T): Changed[T] =
+#     result = Changed[T](changed: true, value: value)
 
-converter changed_value*[T](changed: Changed[T]): T =
-    result = changed.value
+# converter changed_value*[T](changed: Changed[T]): T =
+#     result = changed.value
 
-converter changed_changed*[T](changed: Changed[T]): bool =
-    result = changed.changed
+# converter changed_changed*[T](changed: Changed[T]): bool =
+#     result = changed.has_changed
 
 proc `<-`*[T](c_to, c_from: var Changed[T]): void =
-    if c_from.changed:
-        c_from.changed = false
+    if c_from.has_changed:
+        c_from.has_changed = false
         c_to = c_from
 
 const pi: float32 = 3.1415926535897932384626433832795
@@ -174,8 +174,8 @@ let s_my_plug_latency* = ClapPluginLatency(get: my_plug_latency_get)
 #93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
 
 proc cond_set_with_event*[T](c_to, c_from: var Changed[T], id: ClapID, output: ptr ClapOutputEvents): void =
-    if c_from.changed:
-        c_from.changed = false
+    if c_from.has_changed:
+        c_from.has_changed = false
         c_to = c_from
 
         var event: ClapEventUnion
@@ -272,16 +272,6 @@ proc my_plug_process_event*(myplug: ptr MyPlug, event: ptr ClapEventUnion): void
                 discard
             else:
                 discard
-
-proc db_af*(db: float32): float32 =
-    result = pow(10, 0.05 * db)
-proc db_af*(db: float64): float64 =
-    result = pow(10, 0.05 * db)
-
-proc af_db*(af: float32): float32 =
-    result = 20 * log10(af)
-proc af_db*(af: float64): float64 =
-    result = 20 * log10(af)
 
 proc lerp*(x, y, mix: float32): float32 =
     result = (y - x) * mix + x
@@ -396,17 +386,17 @@ proc my_plug_params_get_value*(plugin: ptr ClapPlugin, id: ClapID, value: ptr fl
     withLock(myplug.controls_mutex):
         case id:
             of ClapID(0):
-                value[] = if myplug.ui_controls.level.changed:
+                value[] = if myplug.ui_controls.level.has_changed:
                             myplug.ui_controls.level.value
                         else:
                             myplug.dsp_controls.level.value
             of ClapID(1):
-                value[] = if myplug.ui_controls.flip.changed:
+                value[] = if myplug.ui_controls.flip.has_changed:
                             myplug.ui_controls.flip.value
                         else:
                             myplug.dsp_controls.flip.value
             of ClapID(2):
-                value[] = if myplug.ui_controls.rotate.changed:
+                value[] = if myplug.ui_controls.rotate.has_changed:
                             myplug.ui_controls.rotate.value
                         else:
                             myplug.dsp_controls.rotate.value

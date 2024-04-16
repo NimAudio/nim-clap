@@ -1,4 +1,6 @@
-import nimclap/[shared, latency, state, log, threadcheck, audioports, noteports, process, events, factory, entry, params]
+import clap_api/[shared, latency, state, log, threadcheck, audioports, noteports, process, events, factory, entry, params]
+
+import utils
 
 import futhark
 
@@ -9,3 +11,6 @@ importc:
     "clap.h"
 
 export shared, latency, state, log, threadcheck, audioports, noteports, process, events, factory, entry, params
+
+export utils
+
