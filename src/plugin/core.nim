@@ -68,6 +68,8 @@ type
         ui_param_data  *: seq[ParameterValue]
         dsp_param_data *: seq[ParameterValue]
         controls_mutex *: Lock
+        latency        *: uint32
+        sample_rate    *: float64
         desc           *: PluginDesc
 
 
@@ -90,11 +92,47 @@ proc convert_plugin_descriptor*(plugin: Plugin): ClapPluginDescriptor =
 
 # let s_my_plug_desc* = 
 
-proc my_plug_params_count*(clap_plugin: ptr ClapPlugin): uint32 {.cdecl.} =
+
+
+proc nim_plug_audio_ports_count*(clap_plugin: ptr ClapPlugin, is_input: bool): uint32 {.cdecl.} =
+    return 1
+
+proc nim_plug_audio_ports_get*(clap_plugin: ptr ClapPlugin,
+                            index: uint32,
+                            is_input: bool,
+                            info: ptr ClapAudioPortInfo): bool {.cdecl.} =
+    if index > 0:
+        return false
+    info.id = 0.ClapID
+    echo(info.name)
+    info.channel_count = 2
+    info.flags = {capfIS_MAIN}
+    info.port_type = CLAP_PORT_STEREO
+    info.in_place_pair = CLAP_INVALID_ID
+    return true
+
+let s_nim_plug_audio_ports* = ClapPluginAudioPorts(count: nim_plug_audio_ports_count, get: nim_plug_audio_ports_get)
+
+proc nim_plug_note_ports_count*(clap_plugin: ptr ClapPlugin, is_input: bool): uint32 {.cdecl.} =
+    return 0
+
+proc nim_plug_note_ports_get*(clap_plugin: ptr ClapPlugin,
+                            index: uint32,
+                            is_input: bool,
+                            info: ptr ClapNotePortInfo): bool {.cdecl.} =
+    return false
+
+let s_nim_plug_note_ports* = ClapPluginNotePorts(count: nim_plug_note_ports_count, get: nim_plug_note_ports_get)
+
+proc nim_plug_latency_get*(clap_plugin: ptr ClapPlugin): uint32 {.cdecl.} =
+    return cast[ptr Plugin](clap_plugin.plugin_data).latency
+
+let s_nim_plug_latency* = ClapPluginLatency(get: nim_plug_latency_get)
+proc nim_plug_params_count*(clap_plugin: ptr ClapPlugin): uint32 {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     return uint32(len(plugin.params))
 
-proc my_plug_params_get_info*(clap_plugin: ptr ClapPlugin, index: uint32, information: ptr ClapParamInfo): bool {.cdecl.} =
+proc nim_plug_params_get_info*(clap_plugin: ptr ClapPlugin, index: uint32, information: ptr ClapParamInfo): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     if index >= uint32(len(plugin.params)):
         return false
@@ -155,7 +193,7 @@ proc bool_to_float(b: bool): float64 =
     else:
         return 0.0
 
-proc my_plug_params_get_value*(clap_plugin: ptr ClapPlugin, id: ClapID, value: ptr float64): bool {.cdecl.} =
+proc nim_plug_params_get_value*(clap_plugin: ptr ClapPlugin, id: ClapID, value: ptr float64): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     var index = uint32(id)
     if index >= uint32(len(plugin.params)):
@@ -189,7 +227,7 @@ template str_to_char_arr_ptr*(write: ptr UncheckedArray[char], read: string, wri
         i += 1
     write[i] = '\0'
 
-proc my_plug_params_value_to_text*(clap_plugin: ptr ClapPlugin, id: ClapID, value: float64, display: ptr UncheckedArray[char], size: uint32): bool {.cdecl.} =
+proc nim_plug_params_value_to_text*(clap_plugin: ptr ClapPlugin, id: ClapID, value: float64, display: ptr UncheckedArray[char], size: uint32): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     var index = uint32(id)
     if index >= uint32(len(plugin.params)):
@@ -232,7 +270,7 @@ proc simple_str_bool(s: string): bool =
         else:
             return false
 
-proc my_plug_params_text_to_value*(clap_plugin: ptr ClapPlugin, id: ClapID, display: cstring, value: ptr float64): bool {.cdecl.} =
+proc nim_plug_params_text_to_value*(clap_plugin: ptr ClapPlugin, id: ClapID, display: cstring, value: ptr float64): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     var index = uint32(id)
     if index >= uint32(len(plugin.params)):
@@ -254,18 +292,18 @@ proc my_plug_params_text_to_value*(clap_plugin: ptr ClapPlugin, id: ClapID, disp
                 value[] = bool_to_float(simple_str_bool($display))
         return true
 
-proc my_plug_params_flush*(clap_plugin: ptr ClapPlugin, input: ptr ClapInputEvents, output: ptr ClapOutputEvents): void {.cdecl.} =
-    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
-    let event_count = input.size(input)
-    sync_ui_to_dsp(plugin, output)
-    for i in 0 ..< event_count:
-        my_plug_process_event(plugin, input.get(input, i))
+# proc nim_plug_params_flush*(clap_plugin: ptr ClapPlugin, input: ptr ClapInputEvents, output: ptr ClapOutputEvents): void {.cdecl.} =
+#     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+#     let event_count = input.size(input)
+#     sync_ui_to_dsp(plugin, output)
+#     for i in 0 ..< event_count:
+#         nim_plug_process_event(plugin, input.get(input, i))
 
-let s_my_plug_params = ClapPluginParams(
-        count         : my_plug_params_count,
-        get_info      : my_plug_params_get_info,
-        get_value     : my_plug_params_get_value,
-        value_to_text : my_plug_params_value_to_text,
-        text_to_value : my_plug_params_text_to_value,
-        flush         : my_plug_params_flush
-    )
+# let s_nim_plug_params = ClapPluginParams(
+#         count         : nim_plug_params_count,
+#         get_info      : nim_plug_params_get_info,
+#         get_value     : nim_plug_params_get_value,
+#         value_to_text : nim_plug_params_value_to_text,
+#         text_to_value : nim_plug_params_text_to_value,
+#         flush         : nim_plug_params_flush
+#     )
