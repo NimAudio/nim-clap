@@ -1,5 +1,7 @@
 import ../clap
-import std/[locks, math, strutils]
+import std/[locks, math, strutils, bitops, tables]
+# import jsony
+
 
 type
     ParameterKind* = enum
@@ -67,6 +69,7 @@ type
         params         *: seq[Parameter]
         ui_param_data  *: seq[ParameterValue]
         dsp_param_data *: seq[ParameterValue]
+        id_map         *: Table[int, int]
         controls_mutex *: Lock
         latency        *: uint32
         sample_rate    *: float64
@@ -128,6 +131,242 @@ proc nim_plug_latency_get*(clap_plugin: ptr ClapPlugin): uint32 {.cdecl.} =
     return cast[ptr Plugin](clap_plugin.plugin_data).latency
 
 let s_nim_plug_latency* = ClapPluginLatency(get: nim_plug_latency_get)
+
+
+
+proc cond_set*(c_to, c_from: var ParameterValue): void =
+    if c_from.has_changed:
+        c_from.has_changed = false
+        c_to.has_changed = false
+        case c_from.kind:
+            of pkFloat:
+                c_to.f_value = c_from.f_value
+            of pkInt:
+                c_to.i_value = c_from.i_value
+            of pkBool:
+                c_to.b_value = c_from.b_value
+
+proc cond_set_with_event*(c_to, c_from: var ParameterValue, id: ClapID, output: ptr ClapOutputEvents): void =
+    if c_from.has_changed:
+        c_from.has_changed = false
+        c_to.has_changed = false
+        var value: float64 = 0.0
+        case c_from.kind:
+            of pkFloat:
+                c_to.f_value = c_from.f_value
+                value = c_from.f_value
+            of pkInt:
+                c_to.i_value = c_from.i_value
+                value = float64(c_from.i_value)
+            of pkBool:
+                c_to.b_value = c_from.b_value
+                value = if c_from.b_value:
+                            1.0
+                        else:
+                            0.0
+        # c_to = c_from
+
+        var event: ClapEventUnion
+        event.kindParamValMod = ClapEventParamValue(
+            header     : ClapEventHeader(
+                size       : uint32(ClapEventParamValue.sizeof),
+                time       : 0,
+                space_id   : 0,
+                event_type : cetPARAM_VALUE,
+                flags      : {}
+            ),
+            param_id   : id,
+            cookie     : nil,
+            note_id    : -1,
+            port_index : -1,
+            channel    : -1,
+            key        : -1,
+            val_amt    : value
+        )
+
+        discard output.try_push(output, addr event)
+
+proc sync_ui_to_dsp*(plugin: ptr Plugin, output: ptr ClapOutputEvents): void =
+    withLock(plugin.controls_mutex):
+        for i in 0 ..< len(plugin.ui_param_data):
+            cond_set_with_event(plugin.dsp_param_data[i],  plugin.ui_param_data[i],  ClapID(i), output)
+
+proc sync_dsp_to_ui*(plugin: ptr Plugin): void =
+    withLock(plugin.controls_mutex):
+        for i in 0 ..< len(plugin.ui_param_data):
+            cond_set(plugin.dsp_param_data[i],  plugin.ui_param_data[i])
+
+# type
+#     JSONParamValue* = object
+#         id *: uint32
+#         case kind *: ParameterKind:
+#             of pkFloat: f_value *: float64
+#             of pkInt:   i_value *: int64
+#             of pkBool:  b_value *: bool
+
+# converter param_val_to_json*(pval: ParameterValue): JSONParamValue =
+#     case pval.kind:
+#         of pkFloat:
+#             result = JSONParamValue(
+#                 id: pval.param.id,
+#                 kind: pkFloat,
+#                 f_value: pval.f_value
+#             )
+#         of pkInt:
+#             result = JSONParamValue(
+#                 id: pval.param.id,
+#                 kind: pkInt,
+#                 i_value: pval.i_value
+#             )
+#         of pkBool:
+#             result = JSONParamValue(
+#                 id: pval.param.id,
+#                 kind: pkBool,
+#                 b_value: pval.b_value
+#             )
+
+# type
+#     JSONSave* = object
+#         plugin_id       *: string
+#         plugin_version  *: string
+#         param_data *: seq[JSONParamValue]
+
+proc get_byte_at*[T: SomeInteger](val: T, position: int): byte =
+    # result = cast[byte]((val shr (position shl 3)) and 0b1111_1111)
+    result = cast[byte](val.bitsliced(position ..< position + 8))
+
+template `+`[T](p: ptr T, off: int): ptr T =
+    cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
+
+proc `[]=`[T](p: ptr[T], i: int, x: T) =
+    (p + i)[] = x
+
+proc `[]=`(p: ptr[byte], i: int, x: byte) =
+    (p + i)[] = x
+
+# proc `[]=`[T](p: ptr[byte]; i: var uint; x: T) =
+#     for j in 0 ..< (T.sizeof):
+#         i += 1
+#         p[i] = get_byte_at[T](x, uint8(i))
+
+proc `[]=`[T](p: ptr[byte], i: int, x: T) =
+    for j in 0 ..< (T.sizeof):
+        p[int(j) + i] = get_byte_at[T](x, int(i))
+
+proc `[]`[T](p: ptr[T], i: int): T =
+    result = (p + i)[]
+
+proc read_as[T](p: ptr[byte], i: int): T =
+    var temp: uint64
+    for j in 0 ..< (T.sizeof):
+        temp.setMask((p + i + j)[] shl (j * 8))
+    result = cast[T](temp)
+
+proc `->`[T](i: var int, x: T) =
+    i += int(x.sizeof)
+proc `<-`[T](i: var int, x: T) =
+    i -= int(x.sizeof)
+
+proc my_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.cdecl.} =
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+    sync_dsp_to_ui(plugin)
+    #TODO update and replace this
+    #TODO - maybe add error correction
+    #TODO - maybe store the plugin id and version and add a stored callback for version checks
+    #TODO - maybe use json, protobuf, whatever, which would allow for nested state
+    #TODO - nested state would be necessary for non-parameter stateful data
+    # var json_param_vals: seq[JSONParamValue]
+    # for i in plugin.ui_param_data:
+    #     json_param_vals.add(i)
+    # var save = JSONSave(
+    #     plugin_id: plugin.desc.id,
+    #     plugin_version: plugin.desc.version,
+    #     param_data: json_param_vals)
+    # let json_str = save.toJson()
+    # let json_size_32: uint32 = uint32(json_str.sizeof)
+    # let json_str_size: string =
+    #     json_size_32 and 1111_1111_0000_0000_0000_0000_0000_0000
+    # toBin(json_size_32, 4)
+    var visible_editable_param_count = 0
+    for p in plugin.params:
+        if (not p.is_hidden) and (not p.is_readonly):
+            visible_editable_param_count += 1
+    var buf_size = uint32(visible_editable_param_count * (
+                                Parameter.id.sizeof +
+                                ParameterValue.has_changed.sizeof +
+                                ParameterValue.f_value.sizeof
+                            ) + 4) #uint32 4, bool 1, float64 8
+    var buffer: ptr[byte] = cast[ptr[byte]](alloc0(buf_size))
+    var index = 0
+    buffer[index] = buf_size
+    index -> buf_size
+    for p_i in 0 ..< len(plugin.params):
+        var p = plugin.params[p_i]
+        var v = plugin.ui_param_data[p_i]
+        if (not p.is_hidden) and (not p.is_readonly):
+            buffer[index] = p.id
+            index -> p.id
+            buffer[index] = cast[uint8](v.has_changed)
+            index -> v.has_changed
+            case v.kind:
+                of pkFloat:
+                    buffer[index] = cast[uint64](v.f_value)
+                    index -> v.f_value
+                of pkInt:
+                    buffer[index] = v.i_value
+                    index -> v.i_value
+                of pkBool:
+                    buffer[index] = cast[uint8](v.b_value)
+                    index += int(ParameterValue.f_value.sizeof)
+    var written_size = 0
+    while written_size < int(buf_size):
+        let status = stream.write(stream, buffer + written_size, uint64(int(buf_size) - written_size))
+        if status > 0:
+            written_size += status
+        else:
+            return false
+    return true
+
+proc my_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream): bool {.cdecl.} =
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+    withLock(plugin.controls_mutex):
+        var buf_size: uint32 = 0
+        if stream.read(stream, addr buf_size, uint64(uint32.sizeof)) > 0:
+            var buffer: ptr[byte] = cast[ptr[byte]](alloc0(int(buf_size) - uint32.sizeof))
+            var read_size = 0
+            while read_size < int(buf_size):
+                let status = stream.read(stream, buffer + read_size, uint64(int(buf_size) - read_size))
+                if status > 0:
+                    read_size += status
+                else:
+                    return false
+            var index = 0
+            for b_i in countup(0, int(buf_size), (
+                                Parameter.id.sizeof +
+                                ParameterValue.has_changed.sizeof +
+                                ParameterValue.f_value.sizeof
+                            )):
+                var i_offset = 0
+                var p_i = plugin.id_map[int(read_as[uint32](buffer, b_i))]
+                var v = plugin.ui_param_data[p_i]
+                i_offset += uint32.sizeof
+                v.has_changed = read_as[bool](buffer, b_i + i_offset)
+                i_offset += bool.sizeof
+                case v.kind:
+                    of pkFloat:
+                        v.f_value = read_as[float64](buffer, b_i + i_offset)
+                    of pkInt:
+                        v.i_value = read_as[int64](buffer, b_i + i_offset)
+                    of pkBool:
+                        v.b_value = read_as[bool](buffer, b_i + i_offset)
+            return true
+        else:
+            return false
+
+let s_my_plug_state* = ClapPluginState(save: my_plug_state_save, load: my_plug_state_load)
+
+
+
 proc nim_plug_params_count*(clap_plugin: ptr ClapPlugin): uint32 {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     return uint32(len(plugin.params))
