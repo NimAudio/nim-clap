@@ -52,11 +52,43 @@ type
             of pkBool:  b_value *: bool
         has_changed *: bool
 
+    PluginDesc* = object
+        id          *: string
+        name        *: string
+        vendor      *: string
+        url         *: string
+        manual_url  *: string
+        support_url *: string
+        version     *: string
+        description *: string
+        features    *: seq[string]
+
     Plugin* = object
         params         *: seq[Parameter]
         ui_param_data  *: seq[ParameterValue]
         dsp_param_data *: seq[ParameterValue]
         controls_mutex *: Lock
+        desc           *: PluginDesc
+
+
+
+proc convert_plugin_descriptor*(plugin: Plugin): ClapPluginDescriptor =
+    result = ClapPluginDescriptor(
+        clap_version: ClapVersion(
+            major:    CLAP_VERSION_MAJOR,
+            minor:    CLAP_VERSION_MINOR,
+            revision: CLAP_VERSION_REVISION),
+        id: cstring(plugin.desc.id),
+        name: cstring(plugin.desc.name),
+        vendor: cstring(plugin.desc.vendor),
+        url: cstring(plugin.desc.url),
+        manual_url: cstring(plugin.desc.manual_url),
+        support_url: cstring(plugin.desc.support_url),
+        version: cstring(plugin.desc.version),
+        description: cstring(plugin.desc.description),
+        features: allocCStringArray(plugin.desc.features))
+
+# let s_my_plug_desc* = 
 
 proc my_plug_params_count*(clap_plugin: ptr ClapPlugin): uint32 {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
