@@ -2,19 +2,28 @@ import ../clap
 import std/[locks, math, strutils, bitops, tables]
 # import jsony
 
-
 type
-    ParameterKind* = enum
-        pkFloat,
-        pkInt,
-        pkBool
-
     AutoModuSupport* = object
         base        *: bool
         per_note_id *: bool
         per_key     *: bool
         per_channel *: bool
         per_port    *: bool
+
+converter auto_modu_support_from_bool(b: bool): AutoModuSupport =
+    return AutoModuSupport(
+        base        : b,
+        per_note_id : false,
+        per_key     : false,
+        per_channel : false,
+        per_port    : false
+    )
+
+type
+    ParameterKind* = enum
+        pkFloat,
+        pkInt,
+        pkBool
 
     Parameter* = object
         name *: string
@@ -43,10 +52,13 @@ type
         is_bypass   *: bool
         is_enum     *: bool
         req_process *: bool
-        automation  *: AutoModuSupport
-        modulation  *: AutoModuSupport
+        automation  *: AutoModuSupport = true
+        modulation  *: AutoModuSupport = false
 
     ParameterValue* = object
+        #TODO add modulation arrays or whatever
+        #TODO - probably doesn't need to be saved/loaded
+        #TODO - does need to be handled in event processing
         param *: ref Parameter
         case kind *: ParameterKind:
             of pkFloat: f_value *: float64
@@ -74,6 +86,16 @@ type
         latency        *: uint32
         sample_rate    *: float64
         desc           *: PluginDesc
+        data           *: pointer
+        cb_on_start_processing *: proc (plugin: ptr Plugin): bool
+        cb_on_stop_processing  *: proc (plugin: ptr Plugin): void
+        cb_on_reset            *: proc (plugin: ptr Plugin): void
+        cb_process_block       *: proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_offset: int): void
+        cb_pre_save            *: proc (plugin: ptr Plugin): void
+        cb_data_to_bytes       *: proc (plugin: ptr Plugin): seq[byte]
+        cb_data_byte_count     *: proc (plugin: ptr Plugin): int = proc (plugin: ptr Plugin): int = return 0
+        cb_data_from_bytes     *: proc (plugin: ptr Plugin, data: seq[byte]): void
+        cb_post_load           *: proc (plugin: ptr Plugin): void
 
 
 
@@ -93,7 +115,7 @@ proc convert_plugin_descriptor*(plugin: Plugin): ClapPluginDescriptor =
         description: cstring(plugin.desc.description),
         features: allocCStringArray(plugin.desc.features))
 
-# let s_my_plug_desc* = 
+# let s_nim_plug_desc* = 
 
 
 
@@ -131,6 +153,16 @@ proc nim_plug_latency_get*(clap_plugin: ptr ClapPlugin): uint32 {.cdecl.} =
     return cast[ptr Plugin](clap_plugin.plugin_data).latency
 
 let s_nim_plug_latency* = ClapPluginLatency(get: nim_plug_latency_get)
+
+
+
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+# MARK: state and sync
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
 
 
 
@@ -235,13 +267,13 @@ proc get_byte_at*[T: SomeInteger](val: T, position: int): byte =
     # result = cast[byte]((val shr (position shl 3)) and 0b1111_1111)
     result = cast[byte](val.bitsliced(position ..< position + 8))
 
-template `+`[T](p: ptr T, off: int): ptr T =
+template `+`*[T](p: ptr T, off: int): ptr T =
     cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
 
-proc `[]=`[T](p: ptr[T], i: int, x: T) =
+proc `[]=`*[T](p: ptr[T], i: int, x: T) =
     (p + i)[] = x
 
-proc `[]=`(p: ptr[byte], i: int, x: byte) =
+proc `[]=`*(p: ptr[byte], i: int, x: byte) =
     (p + i)[] = x
 
 # proc `[]=`[T](p: ptr[byte]; i: var uint; x: T) =
@@ -249,25 +281,25 @@ proc `[]=`(p: ptr[byte], i: int, x: byte) =
 #         i += 1
 #         p[i] = get_byte_at[T](x, uint8(i))
 
-proc `[]=`[T](p: ptr[byte], i: int, x: T) =
+proc `[]=`*[T](p: ptr[byte], i: int, x: T) =
     for j in 0 ..< (T.sizeof):
         p[int(j) + i] = get_byte_at[T](x, int(i))
 
-proc `[]`[T](p: ptr[T], i: int): T =
+proc `[]`*[T](p: ptr[T], i: int): T =
     result = (p + i)[]
 
-proc read_as[T](p: ptr[byte], i: int): T =
+proc read_as*[T](p: ptr[byte], i: int): T =
     var temp: uint64
     for j in 0 ..< (T.sizeof):
         temp.setMask((p + i + j)[] shl (j * 8))
     result = cast[T](temp)
 
-proc `->`[T](i: var int, x: T) =
+proc `->`*[T](i: var int, x: T) =
     i += int(x.sizeof)
-proc `<-`[T](i: var int, x: T) =
+proc `<-`*[T](i: var int, x: T) =
     i -= int(x.sizeof)
 
-proc my_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.cdecl.} =
+proc nim_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     sync_dsp_to_ui(plugin)
     #TODO update and replace this
@@ -287,15 +319,20 @@ proc my_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream): 
     # let json_str_size: string =
     #     json_size_32 and 1111_1111_0000_0000_0000_0000_0000_0000
     # toBin(json_size_32, 4)
+    if plugin.cb_pre_save != nil:
+        plugin.cb_pre_save(plugin)
     var visible_editable_param_count = 0
     for p in plugin.params:
         if (not p.is_hidden) and (not p.is_readonly):
             visible_editable_param_count += 1
+    var data_bytes: seq[byte]
+    if plugin.cb_data_to_bytes != nil:
+        data_bytes = plugin.cb_data_to_bytes(plugin)
     var buf_size = uint32(visible_editable_param_count * (
                                 Parameter.id.sizeof +
                                 ParameterValue.has_changed.sizeof +
                                 ParameterValue.f_value.sizeof
-                            ) + 4) #uint32 4, bool 1, float64 8
+                            ) + 4 + len(data_bytes)) #uint32 4, bool 1, float64 8
     var buffer: ptr[byte] = cast[ptr[byte]](alloc0(buf_size))
     var index = 0
     buffer[index] = buf_size
@@ -318,6 +355,9 @@ proc my_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream): 
                 of pkBool:
                     buffer[index] = cast[uint8](v.b_value)
                     index += int(ParameterValue.f_value.sizeof)
+    for data in data_bytes:
+        buffer[index] = data
+        index += 1
     var written_size = 0
     while written_size < int(buf_size):
         let status = stream.write(stream, buffer + written_size, uint64(int(buf_size) - written_size))
@@ -327,7 +367,7 @@ proc my_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream): 
             return false
     return true
 
-proc my_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream): bool {.cdecl.} =
+proc nim_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     withLock(plugin.controls_mutex):
         var buf_size: uint32 = 0
@@ -340,8 +380,8 @@ proc my_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream): 
                     read_size += status
                 else:
                     return false
-            var index = 0
-            for b_i in countup(0, int(buf_size), (
+            var data_byte_count = plugin.cb_data_byte_count(plugin)
+            for b_i in countup(0, int(buf_size) - data_byte_count, (
                                 Parameter.id.sizeof +
                                 ParameterValue.has_changed.sizeof +
                                 ParameterValue.f_value.sizeof
@@ -359,11 +399,140 @@ proc my_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream): 
                         v.i_value = read_as[int64](buffer, b_i + i_offset)
                     of pkBool:
                         v.b_value = read_as[bool](buffer, b_i + i_offset)
+            var data_bytes: seq[byte]
+            for i in int(buf_size) - data_byte_count ..< int(buf_size):
+                data_bytes.add(read_as[byte](buffer, i))
+            if plugin.cb_data_from_bytes != nil:
+                plugin.cb_data_from_bytes(plugin, data_bytes)
+            if plugin.cb_post_load != nil:
+                plugin.cb_post_load(plugin)
             return true
         else:
             return false
 
-let s_my_plug_state* = ClapPluginState(save: my_plug_state_save, load: my_plug_state_load)
+let s_nim_plug_state* = ClapPluginState(save: nim_plug_state_save, load: nim_plug_state_load)
+
+
+
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+# MARK: process
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+
+
+
+proc nim_plug_start_processing*(clap_plugin: ptr ClapPlugin): bool {.cdecl.} =
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+    if plugin.cb_on_start_processing != nil:
+        return plugin.cb_on_start_processing(plugin)
+    return true
+
+proc nim_plug_stop_processing*(clap_plugin: ptr ClapPlugin): void {.cdecl.} =
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+    if plugin.cb_on_stop_processing != nil:
+        plugin.cb_on_stop_processing(plugin)
+
+proc nim_plug_reset*(clap_plugin: ptr ClapPlugin): void {.cdecl.} =
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+    if plugin.cb_on_reset != nil:
+        plugin.cb_on_reset(plugin)
+
+proc nim_plug_process_event*(plugin: ptr Plugin, event: ptr ClapEventUnion): void {.cdecl.} =
+    # myplug.dsp_controls.level = float32(event.kindParamValMod.val_amt)
+    if event.kindParamValMod.header.space_id == 0:
+        case event.kindParamValMod.header.event_type: # kindParamValMod for both, as the objects are identical
+            of cetPARAM_VALUE: # actual knob changes or automation
+                withLock(plugin.controls_mutex):
+                    let index = plugin.id_map[int(event.kindParamValMod.param_id)]
+                    var param_data = plugin.dsp_param_data[index]
+                    var param = plugin.params[index]
+                    case param.kind:
+                        of pkFloat:
+                            param_data.f_value = event.kindParamValMod.val_amt
+                            param_data.has_changed = true # maybe set up converters to set this and automatically handle conversion based on kind
+                        of pkInt:
+                            param_data.i_value = int64(event.kindParamValMod.val_amt)
+                            param_data.has_changed = true
+                        of pkBool:
+                            param_data.b_value = if event.kindParamValMod.val_amt > 0.5: true else: false
+                            param_data.has_changed = true
+            of cetPARAM_MOD: # per voice modulation
+                discard
+            else:
+                discard
+
+proc lerp*(x, y, mix: float32): float32 =
+    result = (y - x) * mix + x
+
+proc nim_plug_process*(clap_plugin: ptr ClapPlugin, process: ptr ClapProcess): ClapProcessStatus {.cdecl.} =
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+
+    plugin.sync_ui_to_dsp(process.out_events)
+
+    let num_frames: uint32 = process.frames_count
+    let num_events: uint32 = process.in_events.size(process.in_events)
+    var event_idx: uint32 = 0
+    var next_event_frame: uint32 = if num_events > 0: 0 else: num_frames
+
+    var i: uint32 = 0
+    while i < num_frames:
+        while event_idx < num_events and next_event_frame == i:
+            let event: ptr ClapEventUnion = process.in_events.get(process.in_events, event_idx)
+            if event.kindNote.header.time != i:
+                next_event_frame = event.kindNote.header.time
+                break
+
+            # if event.kindNote.header.event_type == cetPARAM_VALUE:
+            #     event.kindParamValMod.val_amt = 1
+            nim_plug_process_event(plugin, event)
+            event_idx += 1
+
+            if event_idx == num_events:
+                next_event_frame = num_frames
+                break
+
+        plugin.cb_process_block(plugin, process, int(i))
+        i = next_event_frame - 1
+        # while i < next_event_frame:
+        #     discard plugin.audio_data.smoothed_level
+        #                 .simple_lp(plugin.smooth_coef, db_af(plugin.dsp_controls.level))
+        #     discard plugin.audio_data.smoothed_flip
+        #                 .simple_lp(plugin.smooth_coef, plugin.dsp_controls.flip)
+        #     discard plugin.audio_data.smoothed_rotate
+        #                 .simple_lp(plugin.smooth_coef, pi * plugin.dsp_controls.rotate)
+
+        #     let in_l: float32 = process.audio_inputs[0].data32[0][i]
+        #     let in_r: float32 = process.audio_inputs[0].data32[1][i]
+
+        #     # let out_l = in_r * 0.5
+        #     # let out_r = in_l
+        #     var scaled_l = plugin.audio_data.smoothed_level * in_l
+        #     var scaled_r = plugin.audio_data.smoothed_level * in_r
+        #     var flipped_l = lerp(scaled_l, scaled_r, plugin.audio_data.smoothed_flip)
+        #     var flipped_r = lerp(scaled_r, scaled_l, plugin.audio_data.smoothed_flip)
+        #     let a_cos: float32 = cos(plugin.audio_data.smoothed_rotate)
+        #     let a_sin: float32 = sin(plugin.audio_data.smoothed_rotate)
+        #     var out_l = flipped_l * a_cos + flipped_r * a_sin
+        #     var out_r = flipped_r * a_cos - flipped_l * a_sin
+
+        #     process.audio_outputs[0].data32[0][i] = out_l
+        #     process.audio_outputs[0].data32[1][i] = out_r
+
+        #     i += 1
+    return cpsCONTINUE
+
+
+
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+# MARK: params
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
 
 
 
@@ -531,18 +700,28 @@ proc nim_plug_params_text_to_value*(clap_plugin: ptr ClapPlugin, id: ClapID, dis
                 value[] = bool_to_float(simple_str_bool($display))
         return true
 
-# proc nim_plug_params_flush*(clap_plugin: ptr ClapPlugin, input: ptr ClapInputEvents, output: ptr ClapOutputEvents): void {.cdecl.} =
-#     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
-#     let event_count = input.size(input)
-#     sync_ui_to_dsp(plugin, output)
-#     for i in 0 ..< event_count:
-#         nim_plug_process_event(plugin, input.get(input, i))
+proc nim_plug_params_flush*(clap_plugin: ptr ClapPlugin, input: ptr ClapInputEvents, output: ptr ClapOutputEvents): void {.cdecl.} =
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+    let event_count = input.size(input)
+    sync_ui_to_dsp(plugin, output)
+    for i in 0 ..< event_count:
+        nim_plug_process_event(plugin, input.get(input, i))
 
-# let s_nim_plug_params = ClapPluginParams(
-#         count         : nim_plug_params_count,
-#         get_info      : nim_plug_params_get_info,
-#         get_value     : nim_plug_params_get_value,
-#         value_to_text : nim_plug_params_value_to_text,
-#         text_to_value : nim_plug_params_text_to_value,
-#         flush         : nim_plug_params_flush
-#     )
+let s_nim_plug_params = ClapPluginParams(
+        count         : nim_plug_params_count,
+        get_info      : nim_plug_params_get_info,
+        get_value     : nim_plug_params_get_value,
+        value_to_text : nim_plug_params_value_to_text,
+        text_to_value : nim_plug_params_text_to_value,
+        flush         : nim_plug_params_flush
+    )
+
+
+
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+# MARK: creation, entry, activation, deactivation
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
