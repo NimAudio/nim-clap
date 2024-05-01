@@ -428,28 +428,28 @@ let s_nim_plug_state* = ClapPluginState(save: nim_plug_state_save, load: nim_plu
 proc lerp*(x, y, mix: float32): float32 =
     result = (y - x) * mix + x
 
-const pi: float64 = 3.1415926535897932384626433832795
+const pi *: float64 = 3.1415926535897932384626433832795
 
 # based on reaktor one pole lowpass coef calculation
-proc onepole_lp_coef(freq: float64, sr: float64): float64 =
+proc onepole_lp_coef*(freq: float64, sr: float64): float64 =
     var input: float64 = min(0.5 * pi, max(0.001, freq) * (pi / sr));
     var tanapprox: float64 = (((0.0388452 - 0.0896638 * input) * input + 1.00005) * input) /
                             ((0.0404318 - 0.430871 * input) * input + 1);
     return tanapprox / (tanapprox + 1);
 
 # based on reaktor one pole lowpass
-proc onepole_lp(last: var float64, coef: float64, src: float64): float64 =
+proc onepole_lp*(last: var float64, coef: float64, src: float64): float64 =
     var delta_scaled: float64 = (src - last) * coef;
     var dst: float64 = delta_scaled + last;
     last = delta_scaled + dst;
     return dst;
 
-proc simple_lp_coef(freq: float64, sr: float64): float64 =
+proc simple_lp_coef*(freq: float64, sr: float64): float64 =
     var w: float64 = (2 * pi * freq) / sr;
     var twomcos: float64 = 2 - cos(w);
     return 1 - (twomcos - sqrt(twomcos * twomcos - 1));
 
-proc simple_lp(smooth: var float64, coef: float64, next: float64): var float64 =
+proc simple_lp*(smooth: var float64, coef: float64, next: float64): var float64 =
     smooth += coef * (next - smooth)
     return smooth
 
@@ -621,7 +621,7 @@ proc nim_plug_params_get_info*(clap_plugin: ptr ClapPlugin, index: uint32, infor
         return true
         # return information.min_value != 0 or information.max_value != 0
 
-proc bool_to_float(b: bool): float64 =
+proc bool_to_float*(b: bool): float64 =
     if b:
         return 1.0
     else:
@@ -686,7 +686,7 @@ proc nim_plug_params_value_to_text*(clap_plugin: ptr ClapPlugin, id: ClapID, val
                     str_to_char_arr_ptr(display, param.false_str, size)
         return true
 
-proc simple_str_bool(s: string): bool =
+proc simple_str_bool*(s: string): bool =
     var c = s[0]
     case c:
         of 'y':
@@ -733,7 +733,7 @@ proc nim_plug_params_flush*(clap_plugin: ptr ClapPlugin, input: ptr ClapInputEve
     for i in 0 ..< event_count:
         nim_plug_process_event(plugin, input.get(input, i))
 
-let s_nim_plug_params = ClapPluginParams(
+let s_nim_plug_params * = ClapPluginParams(
         count         : nim_plug_params_count,
         get_info      : nim_plug_params_get_info,
         get_value     : nim_plug_params_get_value,
@@ -754,183 +754,228 @@ let s_nim_plug_params = ClapPluginParams(
 
 
 
-proc convert_plugin_descriptor*(plugin: Plugin): ClapPluginDescriptor =
-    result = ClapPluginDescriptor(
-        clap_version: ClapVersion(
-            major:    CLAP_VERSION_MAJOR,
-            minor:    CLAP_VERSION_MINOR,
-            revision: CLAP_VERSION_REVISION),
-        id: cstring(plugin.desc.id),
-        name: cstring(plugin.desc.name),
-        vendor: cstring(plugin.desc.vendor),
-        url: cstring(plugin.desc.url),
-        manual_url: cstring(plugin.desc.manual_url),
-        support_url: cstring(plugin.desc.support_url),
-        version: cstring(plugin.desc.version),
-        description: cstring(plugin.desc.description),
-        features: allocCStringArray(plugin.desc.features))
+template create_plugin*(
+    desc                   : PluginDesc,
+    params                 : seq[Parameter],
+    user_data              : pointer,
+    cb_on_start_processing : proc (plugin: ptr Plugin): bool,
+    cb_on_stop_processing  : proc (plugin: ptr Plugin): void,
+    cb_on_reset            : proc (plugin: ptr Plugin): void,
+    cb_process_block       : proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_offset: int): void,
+    cb_pre_save            : proc (plugin: ptr Plugin): void,
+    cb_data_to_bytes       : proc (plugin: ptr Plugin): seq[byte],
+    cb_data_byte_count     : proc (plugin: ptr Plugin): int = proc (plugin: ptr Plugin): int = return 0,
+    cb_data_from_bytes     : proc (plugin: ptr Plugin, data: seq[byte]): void,
+    cb_post_load           : proc (plugin: ptr Plugin): void,
+    cb_init                : proc (plugin: ptr Plugin): void,
+    cb_destroy             : proc (plugin: ptr Plugin): void,
+    cb_activate            : proc (plugin: ptr Plugin, sample_rate: float64, min_frames_count: uint32, max_frames_count: uint32): void,
+    cb_deactivate          : proc (plugin: ptr Plugin): void,
+    cb_on_main_thread      : proc (plugin: ptr Plugin): void,
+    cb_create              : proc (plugin: ptr Plugin, host: ptr ClapHost): void
+    ): untyped =
 
-# let s_nim_plug_desc* = 
+    proc convert_plugin_descriptor*(desc: PluginDesc): ClapPluginDescriptor =
+        result = ClapPluginDescriptor(
+            clap_version: ClapVersion(
+                major:    CLAP_VERSION_MAJOR,
+                minor:    CLAP_VERSION_MINOR,
+                revision: CLAP_VERSION_REVISION),
+            id: cstring(desc.id),
+            name: cstring(desc.name),
+            vendor: cstring(desc.vendor),
+            url: cstring(desc.url),
+            manual_url: cstring(desc.manual_url),
+            support_url: cstring(desc.support_url),
+            version: cstring(desc.version),
+            description: cstring(desc.description),
+            features: allocCStringArray(desc.features))
+
+    const s_nim_plug_desc* = convert_plugin_descriptor(desc)
 
 
-proc nim_plug_init*(clap_plugin: ptr ClapPlugin): bool {.cdecl.} =
-    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
-    plugin.host_log          = cast[ptr ClapHostLog         ](plugin.host.get_extension(plugin.host, CLAP_EXT_LOG          ))
-    plugin.host_thread_check = cast[ptr ClapHostThreadCheck ](plugin.host.get_extension(plugin.host, CLAP_EXT_THREAD_CHECK ))
-    plugin.host_latency      = cast[ptr ClapHostLatency     ](plugin.host.get_extension(plugin.host, CLAP_EXT_LATENCY      ))
-    plugin.host_state        = cast[ptr ClapHostState       ](plugin.host.get_extension(plugin.host, CLAP_EXT_STATE        ))
-    plugin.host_params       = cast[ptr ClapHostParams      ](plugin.host.get_extension(plugin.host, CLAP_EXT_PARAMS       ))
-    for i in 0 ..< len(plugin.params):
-        case plugin.params[i].kind:
-            of pkFloat:
-                plugin.dsp_param_data[i].f_value = plugin.params[i].f_default
-                plugin.dsp_param_data[i].f_value_smoothed = plugin.params[i].f_default
-                plugin.ui_param_data[i].f_value = plugin.params[i].f_default
-                plugin.ui_param_data[i].f_value_smoothed = plugin.params[i].f_default
-            of pkInt:
-                plugin.dsp_param_data[i].i_value = plugin.params[i].i_default
-                plugin.ui_param_data[i].i_value = plugin.params[i].i_default
-            of pkBool:
-                plugin.dsp_param_data[i].b_value = plugin.params[i].b_default
-                plugin.ui_param_data[i].b_value = plugin.params[i].b_default
-    initLock(plugin.controls_mutex)
-    return true
+    proc nim_plug_init*(clap_plugin: ptr ClapPlugin): bool {.cdecl.} =
+        var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+        plugin.host_log          = cast[ptr ClapHostLog         ](plugin.host.get_extension(plugin.host, CLAP_EXT_LOG          ))
+        plugin.host_thread_check = cast[ptr ClapHostThreadCheck ](plugin.host.get_extension(plugin.host, CLAP_EXT_THREAD_CHECK ))
+        plugin.host_latency      = cast[ptr ClapHostLatency     ](plugin.host.get_extension(plugin.host, CLAP_EXT_LATENCY      ))
+        plugin.host_state        = cast[ptr ClapHostState       ](plugin.host.get_extension(plugin.host, CLAP_EXT_STATE        ))
+        plugin.host_params       = cast[ptr ClapHostParams      ](plugin.host.get_extension(plugin.host, CLAP_EXT_PARAMS       ))
+        for i in 0 ..< len(plugin.params):
+            case plugin.params[i].kind:
+                of pkFloat:
+                    plugin.dsp_param_data[i].f_value = plugin.params[i].f_default
+                    plugin.dsp_param_data[i].f_value_smoothed = plugin.params[i].f_default
+                    plugin.ui_param_data[i].f_value = plugin.params[i].f_default
+                    plugin.ui_param_data[i].f_value_smoothed = plugin.params[i].f_default
+                of pkInt:
+                    plugin.dsp_param_data[i].i_value = plugin.params[i].i_default
+                    plugin.ui_param_data[i].i_value = plugin.params[i].i_default
+                of pkBool:
+                    plugin.dsp_param_data[i].b_value = plugin.params[i].b_default
+                    plugin.ui_param_data[i].b_value = plugin.params[i].b_default
+        initLock(plugin.controls_mutex)
+        if cb_init != nil:
+            cb_init(plugin)
+        return true
 
-proc nim_plug_destroy*(clap_plugin: ptr ClapPlugin): void {.cdecl.} =
-    dealloc(cast[ptr Plugin](clap_plugin.plugin_data))
+    proc nim_plug_destroy*(clap_plugin: ptr ClapPlugin): void {.cdecl.} =
+        var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+        if cb_destroy != nil:
+            cb_destroy(plugin)
+        dealloc(plugin)
 
-proc nim_plug_activate*(clap_plugin: ptr ClapPlugin,
-                        sample_rate: float64,
-                        min_frames_count: uint32,
-                        max_frames_count: uint32): bool {.cdecl.} =
-    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
-    plugin.sample_rate = sample_rate
-    for i in 0 ..< len(plugin.params):
-        if plugin.params[i].kind == pkFloat:
-            var coef = simple_lp_coef(plugin.params[i].f_smooth_cutoff, sample_rate)
-            plugin.dsp_param_data[i].f_smooth_coef = coef
-            plugin.ui_param_data[i].f_smooth_coef = coef
-    return true
+    proc nim_plug_activate*(clap_plugin: ptr ClapPlugin,
+                            sample_rate: float64,
+                            min_frames_count: uint32,
+                            max_frames_count: uint32): bool {.cdecl.} =
+        var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+        plugin.sample_rate = sample_rate
+        for i in 0 ..< len(plugin.params):
+            if plugin.params[i].kind == pkFloat:
+                var coef = simple_lp_coef(plugin.params[i].f_smooth_cutoff, sample_rate)
+                plugin.dsp_param_data[i].f_smooth_coef = coef
+                plugin.ui_param_data[i].f_smooth_coef = coef
+        if cb_activate != nil:
+            cb_activate(plugin, sample_rate, min_frames_count, max_frames_count)
+        return true
 
-proc nim_plug_deactivate*(clap_plugin: ptr ClapPlugin): void {.cdecl.} =
-    discard
+    proc nim_plug_deactivate*(clap_plugin: ptr ClapPlugin): void {.cdecl.} =
+        var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+        if cb_deactivate != nil:
+            cb_deactivate(plugin)
 
-proc nim_plug_get_extension*(clap_plugin: ptr ClapPlugin, id: cstring): pointer {.cdecl.} =
-    case id:
-        of CLAP_EXT_LATENCY:
-            return addr s_nim_plug_latency
-        of CLAP_EXT_AUDIO_PORTS:
-            return addr s_nim_plug_audio_ports
-        of CLAP_EXT_NOTE_PORTS:
-            return addr s_nim_plug_note_ports
-        of CLAP_EXT_STATE:
-            return addr s_nim_plug_state
-        of CLAP_EXT_PARAMS:
-            return addr s_nim_plug_params
+    proc nim_plug_get_extension*(clap_plugin: ptr ClapPlugin, id: cstring): pointer {.cdecl.} =
+        case id:
+            of CLAP_EXT_LATENCY:
+                return addr s_nim_plug_latency
+            of CLAP_EXT_AUDIO_PORTS:
+                return addr s_nim_plug_audio_ports
+            of CLAP_EXT_NOTE_PORTS:
+                return addr s_nim_plug_note_ports
+            of CLAP_EXT_STATE:
+                return addr s_nim_plug_state
+            of CLAP_EXT_PARAMS:
+                return addr s_nim_plug_params
 
-proc nim_plug_on_main_thread*(plugin: ptr ClapPlugin): void {.cdecl.} =
-    discard
+    proc nim_plug_on_main_thread*(plugin: ptr ClapPlugin): void {.cdecl.} =
+        var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+        if cb_on_main_thread != nil:
+            cb_on_main_thread(plugin)
 
-proc nim_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
-    var plugin = cast[ptr Plugin](alloc0(Plugin.sizeof))
-    plugin.host = host
-    plugin.clap_plugin = cast[ptr ClapPlugin](alloc0(ClapPlugin.sizeof)) # remove if changed to not a pointer
-    plugin.clap_plugin.desc = addr s_nim_plug_desc
-    plugin.clap_plugin.plugin_data = plugin
-    plugin.clap_plugin.init = nim_plug_init
-    plugin.clap_plugin.destroy = nim_plug_destroy
-    plugin.clap_plugin.activate = nim_plug_activate
-    plugin.clap_plugin.deactivate = nim_plug_deactivate
-    plugin.clap_plugin.start_processing = nim_plug_start_processing
-    plugin.clap_plugin.stop_processing = nim_plug_stop_processing
-    plugin.clap_plugin.reset = nim_plug_reset
-    plugin.clap_plugin.process = nim_plug_process
-    plugin.clap_plugin.get_extension = nim_plug_get_extension
-    plugin.clap_plugin.on_main_thread = nim_plug_on_main_thread
-    plugin.dsp_param_data = @[]
-    plugin.ui_param_data = @[]
-    for i in 0 ..< len(plugin.params):
-        plugin.dsp_param_data.add(ParameterValue(
-            param: plugin.params[i],
-            kind:  plugin.params[i].kind
-        ))
-        plugin.ui_param_data.add(ParameterValue(
-            param: plugin.params[i],
-            kind:  plugin.params[i].kind
-        ))
-    return plugin.clap_plugin
-    # return addr plugin.clap_plugin # if it wasn't a pointer
+    proc nim_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
+        var plugin = cast[ptr Plugin](alloc0(Plugin.sizeof))
+        plugin.host = host
+        plugin.clap_plugin = cast[ptr ClapPlugin](alloc0(ClapPlugin.sizeof)) # remove if changed to not a pointer
+        plugin.clap_plugin.desc = addr s_nim_plug_desc
+        plugin.clap_plugin.plugin_data = plugin
+        plugin.clap_plugin.init = nim_plug_init
+        plugin.clap_plugin.destroy = nim_plug_destroy
+        plugin.clap_plugin.activate = nim_plug_activate
+        plugin.clap_plugin.deactivate = nim_plug_deactivate
+        plugin.clap_plugin.start_processing = nim_plug_start_processing
+        plugin.clap_plugin.stop_processing = nim_plug_stop_processing
+        plugin.clap_plugin.reset = nim_plug_reset
+        plugin.clap_plugin.process = nim_plug_process
+        plugin.clap_plugin.get_extension = nim_plug_get_extension
+        plugin.clap_plugin.on_main_thread = nim_plug_on_main_thread
+        plugin.params = params
+        plugin.dsp_param_data = @[]
+        plugin.ui_param_data = @[]
+        for i in 0 ..< len(plugin.params):
+            plugin.dsp_param_data.add(ParameterValue(
+                param: plugin.params[i],
+                kind:  plugin.params[i].kind
+            ))
+            plugin.ui_param_data.add(ParameterValue(
+                param: plugin.params[i],
+                kind:  plugin.params[i].kind
+            ))
+        plugin.data                   = user_data
+        plugin.cb_on_start_processing = cb_on_start_processing
+        plugin.cb_on_stop_processing  = cb_on_stop_processing
+        plugin.cb_on_reset            = cb_on_reset
+        plugin.cb_process_block       = cb_process_block
+        plugin.cb_pre_save            = cb_pre_save
+        plugin.cb_data_to_bytes       = cb_data_to_bytes
+        plugin.cb_data_byte_count     = cb_data_byte_count
+        plugin.cb_data_from_bytes     = cb_data_from_bytes
+        plugin.cb_post_load           = cb_post_load
+        if cb_create != nil:
+            cb_create(plugin, host)
+        return plugin.clap_plugin
+        # return addr plugin.clap_plugin # if it wasn't a pointer
 
-type
-    ClapDescCreate* = object
-        desc *: ptr ClapPluginDescriptor
-        create *: proc (host: ptr ClapHost): ptr ClapPlugin {.cdecl.}
+    type
+        ClapDescCreate* = object
+            desc *: ptr ClapPluginDescriptor
+            create *: proc (host: ptr ClapHost): ptr ClapPlugin {.cdecl.}
 
-const plugin_count*: uint32 = 1
+    const plugin_count*: uint32 = 1
 
-let s_plugins: array[plugin_count, ClapDescCreate] = [
-    ClapDescCreate(desc: addr s_nim_plug_desc, create: nim_plug_create)
-]
+    let s_plugins: array[plugin_count, ClapDescCreate] = [
+        ClapDescCreate(desc: addr s_nim_plug_desc, create: nim_plug_create)
+    ]
 
-proc plugin_factory_get_plugin_count*(factory: ptr ClapPluginFactory): uint32 {.cdecl.} =
-    return plugin_count
+    proc plugin_factory_get_plugin_count*(factory: ptr ClapPluginFactory): uint32 {.cdecl.} =
+        return plugin_count
 
-proc plugin_factory_get_plugin_descriptor*(factory: ptr ClapPluginFactory, index: uint32): ptr ClapPluginDescriptor {.cdecl.} =
-    return s_plugins[index].desc
+    proc plugin_factory_get_plugin_descriptor*(factory: ptr ClapPluginFactory, index: uint32): ptr ClapPluginDescriptor {.cdecl.} =
+        return s_plugins[index].desc
 
-proc plugin_factory_create_plugin*(factory: ptr ClapPluginFactory,
-                                    host: ptr ClapHost,
-                                    plugin_id: cstring): ptr ClapPlugin {.cdecl.} =
-    if host.clap_version.major < 1:
+    proc plugin_factory_create_plugin*(factory: ptr ClapPluginFactory,
+                                        host: ptr ClapHost,
+                                        plugin_id: cstring): ptr ClapPlugin {.cdecl.} =
+        if host.clap_version.major < 1:
+            return nil
+
+        for i in 0 ..< plugin_count:
+            if plugin_id == s_plugins[i].desc.id:
+                return s_plugins[i].create(host)
+
         return nil
 
-    for i in 0 ..< plugin_count:
-        if plugin_id == s_plugins[i].desc.id:
-            return s_plugins[i].create(host)
+    let s_plugin_factory* = ClapPluginFactory(
+        get_plugin_count: plugin_factory_get_plugin_count,
+        get_plugin_descriptor: plugin_factory_get_plugin_descriptor,
+        create_plugin: plugin_factory_create_plugin)
 
-    return nil
+    proc entry_init*(plugin_path: cstring): bool {.cdecl.} =
+        return true
 
-let s_plugin_factory* = ClapPluginFactory(
-    get_plugin_count: plugin_factory_get_plugin_count,
-    get_plugin_descriptor: plugin_factory_get_plugin_descriptor,
-    create_plugin: plugin_factory_create_plugin)
+    proc entry_deinit*(): void {.cdecl.} =
+        discard
 
-proc entry_init*(plugin_path: cstring): bool {.cdecl.} =
-    return true
+    var g_entry_init_counter = 0
 
-proc entry_deinit*(): void {.cdecl.} =
-    discard
+    proc entry_init_guard*(plugin_path: cstring): bool {.cdecl.} =
+        # add mutex lock
+        g_entry_init_counter += 1
+        var succeed = true
+        if g_entry_init_counter == 1:
+            succeed = entry_init(plugin_path)
+            if not succeed:
+                g_entry_init_counter = 0
+        # mutex unlock
+        return succeed
 
-var g_entry_init_counter = 0
+    proc entry_deinit_guard*(): void {.cdecl.} =
+        # add mutex lock
+        g_entry_init_counter -= 1
+        if g_entry_init_counter == 0:
+            entry_deinit()
+        # mutex unlock
 
-proc entry_init_guard*(plugin_path: cstring): bool {.cdecl.} =
-    # add mutex lock
-    g_entry_init_counter += 1
-    var succeed = true
-    if g_entry_init_counter == 1:
-        succeed = entry_init(plugin_path)
-        if not succeed:
-            g_entry_init_counter = 0
-    # mutex unlock
-    return succeed
-
-proc entry_deinit_guard*(): void {.cdecl.} =
-    # add mutex lock
-    g_entry_init_counter -= 1
-    if g_entry_init_counter == 0:
-        entry_deinit()
-    # mutex unlock
-
-proc entry_get_factory*(factory_id: cstring): ptr ClapPluginFactory {.cdecl.} =
-    if g_entry_init_counter <= 0:
+    proc entry_get_factory*(factory_id: cstring): ptr ClapPluginFactory {.cdecl.} =
+        if g_entry_init_counter <= 0:
+            return nil
+        if factory_id == CLAP_PLUGIN_FACTORY_ID:
+            return addr s_plugin_factory
         return nil
-    if factory_id == CLAP_PLUGIN_FACTORY_ID:
-        return addr s_plugin_factory
-    return nil
 
-let clap_entry* {.global, exportc: "clap_entry", dynlib.} = ClapPluginEntry(
-    clap_version: CLAP_VERSION_INIT,
-    init: entry_init_guard,
-    deinit: entry_deinit_guard,
-    get_factory: entry_get_factory
-)
+    let clap_entry* {.global, exportc: "clap_entry", dynlib.} = ClapPluginEntry(
+        clap_version: CLAP_VERSION_INIT,
+        init: entry_init_guard,
+        deinit: entry_deinit_guard,
+        get_factory: entry_get_factory
+    )
