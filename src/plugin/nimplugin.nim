@@ -94,7 +94,7 @@ type
         params         *: seq[Parameter]
         ui_param_data  *: seq[ParameterValue]
         dsp_param_data *: seq[ParameterValue]
-        id_map         *: Table[int, int]
+        id_map         *: Table[uint32, int]
         controls_mutex *: Lock
         # basics
         latency        *: uint32
@@ -388,7 +388,7 @@ proc nim_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream):
                                 ParameterValue.f_value.sizeof
                             )):
                 var i_offset = 0
-                var p_i = plugin.id_map[int(read_as[uint32](buffer, b_i))]
+                var p_i = plugin.id_map[read_as[uint32](buffer, b_i)]
                 var v = plugin.ui_param_data[p_i]
                 i_offset += uint32.sizeof
                 v.has_changed = read_as[bool](buffer, b_i + i_offset)
@@ -475,7 +475,7 @@ proc nim_plug_process_event*(plugin: ptr Plugin, event: ptr ClapEventUnion): voi
         case event.kindParamValMod.header.event_type: # kindParamValMod for both, as the objects are identical
             of cetPARAM_VALUE: # actual knob changes or automation
                 withLock(plugin.controls_mutex):
-                    let index = plugin.id_map[int(event.kindParamValMod.param_id)]
+                    let index = plugin.id_map[uint32(event.kindParamValMod.param_id)]
                     var param_data = plugin.dsp_param_data[index]
                     var param = plugin.params[index]
                     case param.kind:
@@ -942,6 +942,10 @@ proc sort_by_id*(params: var seq[Parameter]): void =
 #             name: "hidden"
 #         )
 
+proc id_table*(params: seq[Parameter]): Table[uint32, int] =
+    for i in 0 ..< len(params):
+        result[params[i].id] = i
+
 
 
 #93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
@@ -957,6 +961,7 @@ proc sort_by_id*(params: var seq[Parameter]): void =
 template create_plugin*(
     desc                   : PluginDesc,
     params                 : seq[Parameter],
+    id_map                 : Table[uint32, int],
     user_data              : pointer,
     cb_on_start_processing : proc (plugin: ptr Plugin): bool,
     cb_on_stop_processing  : proc (plugin: ptr Plugin): void,
@@ -1080,6 +1085,7 @@ template create_plugin*(
         plugin.clap_plugin.get_extension = nim_plug_get_extension
         plugin.clap_plugin.on_main_thread = nim_plug_on_main_thread
         plugin.params = params
+        plugin.id_map = id_map
         plugin.dsp_param_data = @[]
         plugin.ui_param_data = @[]
         for i in 0 ..< len(plugin.params):
