@@ -111,7 +111,7 @@ type
         cb_on_start_processing *: proc (plugin: ptr Plugin): bool
         cb_on_stop_processing  *: proc (plugin: ptr Plugin): void
         cb_on_reset            *: proc (plugin: ptr Plugin): void
-        cb_process_block       *: proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_offset: int): void
+        cb_process_block       *: proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_start, rw_end_excluded: int): void
         cb_pre_save            *: proc (plugin: ptr Plugin): void
         cb_data_to_bytes       *: proc (plugin: ptr Plugin): seq[byte]
         cb_data_byte_count     *: proc (plugin: ptr Plugin): int = proc (plugin: ptr Plugin): int = return 0
@@ -520,8 +520,8 @@ proc nim_plug_process*(clap_plugin: ptr ClapPlugin, process: ptr ClapProcess): C
                 next_event_frame = num_frames
                 break
 
-        plugin.cb_process_block(plugin, process, int(i))
-        i = next_event_frame - 1
+        plugin.cb_process_block(plugin, process, int(i), int(next_event_frame))
+        i = next_event_frame
         # while i < next_event_frame:
         #     discard plugin.audio_data.smoothed_level
         #                 .simple_lp(plugin.smooth_coef, db_af(plugin.dsp_controls.level))
@@ -568,10 +568,13 @@ proc nim_plug_params_count*(clap_plugin: ptr ClapPlugin): uint32 {.cdecl.} =
 
 proc nim_plug_params_get_info*(clap_plugin: ptr ClapPlugin, index: uint32, information: ptr ClapParamInfo): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
-    if index >= uint32(len(plugin.params)):
+    # if index >= uint32(len(plugin.params)):
+    #     return false
+    # else:
+    if index notin plugin.id_map:
         return false
     else:
-        var param = plugin.params[index]
+        var param = plugin.params[plugin.id_map[index]]
         var flags: set[ClapParamInfoFlag]
         if param.kind == pkInt or param.kind == pkBool:
             flags.incl(cpiIS_STEPPED)
@@ -609,7 +612,7 @@ proc nim_plug_params_get_info*(clap_plugin: ptr ClapPlugin, index: uint32, infor
             of pkBool:
                 default_val = if param.b_default: 1.0 else: 0.0
         information[] = ClapParamInfo(
-            id            : ClapID(index),
+            id            : ClapID(param.id),
             flags         : flags,
             cookie        : nil, # figure this out and implement it
             name          : char_arr_name(param.name),
@@ -966,7 +969,7 @@ template create_plugin*(
     cb_on_start_processing : proc (plugin: ptr Plugin): bool,
     cb_on_stop_processing  : proc (plugin: ptr Plugin): void,
     cb_on_reset            : proc (plugin: ptr Plugin): void,
-    cb_process_block       : proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_offset: int): void,
+    cb_process_block       : proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_start, rw_end_excluded: int): void,
     cb_pre_save            : proc (plugin: ptr Plugin): void,
     cb_data_to_bytes       : proc (plugin: ptr Plugin): seq[byte],
     cb_data_byte_count     : proc (plugin: ptr Plugin): int = proc (plugin: ptr Plugin): int = return 0,
