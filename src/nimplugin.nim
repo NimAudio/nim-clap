@@ -65,10 +65,14 @@ type
         param *: Parameter
         case kind *: ParameterKind:
             of pkFloat:
-                f_value          *: float64
-                f_smooth_coef    *: float64
-            of pkInt:  i_value *: int64
-            of pkBool: b_value *: bool
+                f_raw_value   *: float64
+                f_value       *: float64
+                f_smooth_coef *: float64
+            of pkInt:
+                i_raw_value *: int64
+                i_value     *: int64
+            of pkBool:
+                b_value *: bool
         has_changed *: bool
 
     PluginDesc* = object
@@ -174,9 +178,9 @@ proc cond_set*(c_to, c_from: var ParameterValue): void =
         c_to.has_changed = false
         case c_from.kind:
             of pkFloat:
-                c_to.f_value = c_from.f_value
+                c_to.f_raw_value = c_from.f_raw_value
             of pkInt:
-                c_to.i_value = c_from.i_value
+                c_to.i_raw_value = c_from.i_raw_value
             of pkBool:
                 c_to.b_value = c_from.b_value
 
@@ -187,11 +191,11 @@ proc cond_set_with_event*(c_to, c_from: var ParameterValue, id: ClapID, output: 
         var value: float64 = 0.0
         case c_from.kind:
             of pkFloat:
-                c_to.f_value = c_from.f_value
-                value = c_from.f_value
+                c_to.f_raw_value = c_from.f_raw_value
+                value = c_from.f_raw_value
             of pkInt:
-                c_to.i_value = c_from.i_value
-                value = float64(c_from.i_value)
+                c_to.i_raw_value = c_from.i_raw_value
+                value = float64(c_from.i_raw_value)
             of pkBool:
                 c_to.b_value = c_from.b_value
                 value = if c_from.b_value:
@@ -234,8 +238,8 @@ proc sync_dsp_to_ui*(plugin: ptr Plugin): void =
 #     JSONParamValue* = object
 #         id *: uint32
 #         case kind *: ParameterKind:
-#             of pkFloat: f_value *: float64
-#             of pkInt:   i_value *: int64
+#             of pkFloat: f_raw_value *: float64
+#             of pkInt:   i_raw_value *: int64
 #             of pkBool:  b_value *: bool
 
 # converter param_val_to_json*(pval: ParameterValue): JSONParamValue =
@@ -244,13 +248,13 @@ proc sync_dsp_to_ui*(plugin: ptr Plugin): void =
 #             result = JSONParamValue(
 #                 id: pval.param.id,
 #                 kind: pkFloat,
-#                 f_value: pval.f_value
+#                 f_raw_value: pval.f_raw_value
 #             )
 #         of pkInt:
 #             result = JSONParamValue(
 #                 id: pval.param.id,
 #                 kind: pkInt,
-#                 i_value: pval.i_value
+#                 i_raw_value: pval.i_raw_value
 #             )
 #         of pkBool:
 #             result = JSONParamValue(
@@ -333,7 +337,7 @@ proc nim_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream):
     var buf_size = uint32(visible_editable_param_count * (
                                 Parameter.id.sizeof +
                                 ParameterValue.has_changed.sizeof +
-                                ParameterValue.f_value.sizeof
+                                ParameterValue.f_raw_value.sizeof
                             ) + 4 + len(data_bytes)) #uint32 4, bool 1, float64 8
     var buffer: ptr[byte] = cast[ptr[byte]](alloc0(buf_size))
     var index = 0
@@ -349,14 +353,14 @@ proc nim_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream):
             index -> v.has_changed
             case v.kind:
                 of pkFloat:
-                    buffer[index] = cast[uint64](v.f_value)
-                    index -> v.f_value
+                    buffer[index] = cast[uint64](v.f_raw_value)
+                    index -> v.f_raw_value
                 of pkInt:
-                    buffer[index] = v.i_value
-                    index -> v.i_value
+                    buffer[index] = v.i_raw_value
+                    index -> v.i_raw_value
                 of pkBool:
                     buffer[index] = cast[uint8](v.b_value)
-                    index += int(ParameterValue.f_value.sizeof)
+                    index += int(ParameterValue.f_raw_value.sizeof)
     for data in data_bytes:
         buffer[index] = data
         index += 1
@@ -386,19 +390,24 @@ proc nim_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream):
             for b_i in countup(0, int(buf_size) - data_byte_count, (
                                 Parameter.id.sizeof +
                                 ParameterValue.has_changed.sizeof +
-                                ParameterValue.f_value.sizeof
+                                ParameterValue.f_raw_value.sizeof
                             )):
                 var i_offset = 0
                 var p_i = plugin.id_map[read_as[uint32](buffer, b_i)]
                 var v = plugin.ui_param_data[p_i]
+                var p = plugin.params[p_i]
                 i_offset += uint32.sizeof
                 v.has_changed = read_as[bool](buffer, b_i + i_offset)
                 i_offset += bool.sizeof
                 case v.kind:
                     of pkFloat:
-                        v.f_value = read_as[float64](buffer, b_i + i_offset)
+                        v.f_raw_value = read_as[float64](buffer, b_i + i_offset)
+                        v.f_value = if p.f_remap != nil:
+                                                p.f_remap(v.f_raw_value)
+                                            else:
+                                                v.f_raw_value
                     of pkInt:
-                        v.i_value = read_as[int64](buffer, b_i + i_offset)
+                        v.i_raw_value = read_as[int64](buffer, b_i + i_offset)
                     of pkBool:
                         v.b_value = read_as[bool](buffer, b_i + i_offset)
             var data_bytes: seq[byte]
@@ -481,16 +490,17 @@ proc nim_plug_process_event*(plugin: ptr Plugin, event: ptr ClapEventUnion): voi
                     var param = plugin.params[index]
                     case param.kind:
                         of pkFloat:
+                            param_data.f_raw_value = event.kindParamValMod.val_amt
                             param_data.f_value = simple_lp(
-                                                    param_data.f_value,
-                                                    param_data.f_smooth_coef,
-                                                    if param.f_remap != nil:
-                                                        param.f_remap(event.kindParamValMod.val_amt)
-                                                    else:
-                                                        event.kindParamValMod.val_amt)
+                                                            param_data.f_raw_value,
+                                                            param_data.f_smooth_coef,
+                                                            if param.f_remap != nil:
+                                                                param.f_remap(event.kindParamValMod.val_amt)
+                                                            else:
+                                                                event.kindParamValMod.val_amt)
                             param_data.has_changed = true # maybe set up converters to set this and automatically handle conversion based on kind
                         of pkInt:
-                            param_data.i_value = if param.i_remap != nil:
+                            param_data.i_raw_value = if param.i_remap != nil:
                                                     param.i_remap(int64(event.kindParamValMod.val_amt))
                                                 else:
                                                     int64(event.kindParamValMod.val_amt)
@@ -651,17 +661,17 @@ proc nim_plug_params_get_value*(clap_plugin: ptr ClapPlugin, id: ClapID, value: 
             value[] = if plugin.ui_param_data[index].has_changed:
                         case plugin.ui_param_data[index].kind:
                             of pkFloat:
-                                plugin.ui_param_data[index].f_value
+                                plugin.ui_param_data[index].f_raw_value
                             of pkInt:
-                                float64(plugin.ui_param_data[index].i_value)
+                                float64(plugin.ui_param_data[index].i_raw_value)
                             of pkBool:
                                 bool_to_float(plugin.ui_param_data[index].b_value)
                     else:
                         case plugin.dsp_param_data[index].kind:
                             of pkFloat:
-                                plugin.dsp_param_data[index].f_value
+                                plugin.dsp_param_data[index].f_raw_value
                             of pkInt:
-                                float64(plugin.dsp_param_data[index].i_value)
+                                float64(plugin.dsp_param_data[index].i_raw_value)
                             of pkBool:
                                 bool_to_float(plugin.dsp_param_data[index].b_value)
         return true
@@ -1024,21 +1034,26 @@ template create_plugin*(
         plugin.host_state        = cast[ptr ClapHostState       ](plugin.host.get_extension(plugin.host, CLAP_EXT_STATE        ))
         plugin.host_params       = cast[ptr ClapHostParams      ](plugin.host.get_extension(plugin.host, CLAP_EXT_PARAMS       ))
         for i in 0 ..< len(plugin.params):
-            case plugin.params[i].kind:
+            var p = plugin.params[i]
+            case p.kind:
                 of pkFloat:
-                    var default = if param.f_remap != nil:
-                                    param.f_remap(plugin.params[i].f_default)
+                    var remapped = if p.f_remap != nil:
+                                    p.f_remap(p.f_default)
                                 else:
-                                    plugin.params[i].f_default
-                    plugin.dsp_param_data[i].f_value = default
-                    plugin.ui_param_data[i].f_value = default
+                                    p.f_default
+                    plugin.dsp_param_data[i].f_raw_value = p.f_default
+                    plugin.dsp_param_data[i].f_value     = remapped
+                    plugin.ui_param_data[i].f_raw_value = p.f_default
+                    plugin.ui_param_data[i].f_value     = remapped
                 of pkInt:
-                    var default = if param.i_remap != nil:
-                                    param.i_remap(plugin.params[i].i_default)
+                    var remapped = if p.i_remap != nil:
+                                    p.i_remap(p.i_default)
                                 else:
-                                    plugin.params[i].i_default
-                    plugin.dsp_param_data[i].i_value = default
-                    plugin.ui_param_data[i].i_value = default
+                                    p.i_default
+                    plugin.dsp_param_data[i].i_raw_value = p.i_default
+                    plugin.dsp_param_data[i].i_value     = remapped
+                    plugin.ui_param_data[i].i_raw_value = p.i_default
+                    plugin.ui_param_data[i].i_value     = remapped
                 of pkBool:
                     plugin.dsp_param_data[i].b_value = plugin.params[i].b_default
                     plugin.ui_param_data[i].b_value = plugin.params[i].b_default
