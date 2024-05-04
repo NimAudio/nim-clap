@@ -1,4 +1,4 @@
-import ../clap
+import clap
 import std/[locks, math, strutils, bitops, tables, algorithm]
 # import jsony
 
@@ -35,6 +35,7 @@ type
                 f_default       *: float64
                 f_as_value      *: proc (str: string): float64
                 f_as_string     *: proc (val: float64): string
+                f_remap         *: proc (val: float64): float64
                 f_smooth_cutoff *: float64
             of pkInt:
                 i_min       *: int64
@@ -42,6 +43,7 @@ type
                 i_default   *: int64
                 i_as_value  *: proc (str: string): int64
                 i_as_string *: proc (val: int64): string
+                i_remap     *: proc (val: int64): int64
             of pkBool:
                 b_default *: bool
                 true_str  *: string
@@ -64,7 +66,6 @@ type
         case kind *: ParameterKind:
             of pkFloat:
                 f_value          *: float64
-                f_value_smoothed *: float64
                 f_smooth_coef    *: float64
             of pkInt:  i_value *: int64
             of pkBool: b_value *: bool
@@ -480,13 +481,22 @@ proc nim_plug_process_event*(plugin: ptr Plugin, event: ptr ClapEventUnion): voi
                     var param = plugin.params[index]
                     case param.kind:
                         of pkFloat:
-                            param_data.f_value = simple_lp(param_data.f_value, param_data.f_smooth_coef, event.kindParamValMod.val_amt)
+                            param_data.f_value = simple_lp(
+                                                    param_data.f_value,
+                                                    param_data.f_smooth_coef,
+                                                    if param.f_remap != nil:
+                                                        param.f_remap(event.kindParamValMod.val_amt)
+                                                    else:
+                                                        event.kindParamValMod.val_amt)
                             param_data.has_changed = true # maybe set up converters to set this and automatically handle conversion based on kind
                         of pkInt:
-                            param_data.i_value = int64(event.kindParamValMod.val_amt)
+                            param_data.i_value = if param.i_remap != nil:
+                                                    param.i_remap(int64(event.kindParamValMod.val_amt))
+                                                else:
+                                                    int64(event.kindParamValMod.val_amt)
                             param_data.has_changed = true
                         of pkBool:
-                            param_data.b_value = if event.kindParamValMod.val_amt > 0.5: true else: false
+                            param_data.b_value = event.kindParamValMod.val_amt > 0.5
                             param_data.has_changed = true
             of cetPARAM_MOD: # per voice modulation
                 discard
@@ -761,14 +771,15 @@ let s_nim_plug_params * = ClapPluginParams(
 
 proc newFloatParameter*(
         name            : string,
-        path            : string,
         min             : float64,
         max             : float64,
         default         : float64,
-        as_value        : proc (str: string): float64,
-        as_string       : proc (val: float64): string,
         smooth_cutoff   : float64,
         id              : uint32,
+        as_value        : proc (str: string): float64 = nil,
+        as_string       : proc (val: float64): string = nil,
+        remap           : proc (val: float64): float64 = nil,
+        path            : string,
         is_periodic     : bool = false,
         is_hidden       : bool = false,
         is_readonly     : bool = false,
@@ -785,6 +796,7 @@ proc newFloatParameter*(
         f_default       : default,
         f_as_value      : as_value,
         f_as_string     : as_string,
+        f_remap         : remap,
         f_smooth_cutoff : smooth_cutoff,
         id              : id,
         is_periodic     : is_periodic,
@@ -798,13 +810,14 @@ proc newFloatParameter*(
 
 proc newIntParameter*(
         name            : string,
-        path            : string,
         min             : int64,
         max             : int64,
         default         : int64,
-        as_value        : proc (str: string): int64,
-        as_string       : proc (val: int64): string,
         id              : uint32,
+        as_value        : proc (str: string): int64 = nil,
+        as_string       : proc (val: int64): string = nil,
+        remap           : proc (val: int64): int64,
+        path            : string = "",
         is_periodic     : bool = false,
         is_hidden       : bool = false,
         is_readonly     : bool = false,
@@ -821,6 +834,7 @@ proc newIntParameter*(
         i_default       : default,
         i_as_value      : as_value,
         i_as_string     : as_string,
+        i_remap         : remap,
         id              : id,
         is_periodic     : is_periodic,
         is_hidden       : is_hidden,
@@ -833,11 +847,11 @@ proc newIntParameter*(
 
 proc newBoolParameter*(
         name            : string,
-        path            : string,
         default         : bool,
-        true_str        : string,
-        false_str       : string,
         id              : uint32,
+        true_str        : string = "True",
+        false_str       : string = "False",
+        path            : string = "",
         is_periodic     : bool = false,
         is_hidden       : bool = false,
         is_readonly     : bool = false,
@@ -1012,13 +1026,19 @@ template create_plugin*(
         for i in 0 ..< len(plugin.params):
             case plugin.params[i].kind:
                 of pkFloat:
-                    plugin.dsp_param_data[i].f_value = plugin.params[i].f_default
-                    plugin.dsp_param_data[i].f_value_smoothed = plugin.params[i].f_default
-                    plugin.ui_param_data[i].f_value = plugin.params[i].f_default
-                    plugin.ui_param_data[i].f_value_smoothed = plugin.params[i].f_default
+                    var default = if param.f_remap != nil:
+                                    param.f_remap(plugin.params[i].f_default)
+                                else:
+                                    plugin.params[i].f_default
+                    plugin.dsp_param_data[i].f_value = default
+                    plugin.ui_param_data[i].f_value = default
                 of pkInt:
-                    plugin.dsp_param_data[i].i_value = plugin.params[i].i_default
-                    plugin.ui_param_data[i].i_value = plugin.params[i].i_default
+                    var default = if param.i_remap != nil:
+                                    param.i_remap(plugin.params[i].i_default)
+                                else:
+                                    plugin.params[i].i_default
+                    plugin.dsp_param_data[i].i_value = default
+                    plugin.ui_param_data[i].i_value = default
                 of pkBool:
                     plugin.dsp_param_data[i].b_value = plugin.params[i].b_default
                     plugin.ui_param_data[i].b_value = plugin.params[i].b_default
