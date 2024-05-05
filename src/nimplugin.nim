@@ -383,8 +383,10 @@ proc nim_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream):
             var read_size = 0
             while read_size < int(buf_size):
                 let status = stream.read(stream, buffer + read_size, uint64(int(buf_size) - read_size))
-                if status > 0:
+                if status >= 0:
                     read_size += status
+                elif status == 0:
+                    break
                 else:
                     return false
             var data_byte_count = plugin.cb_data_byte_count(plugin)
@@ -493,7 +495,7 @@ proc nim_plug_process_event*(plugin: ptr Plugin, event: ptr ClapEventUnion): voi
                         of pkFloat:
                             param_data.f_raw_value = event.kindParamValMod.val_amt
                             param_data.f_value = simple_lp(
-                                                            param_data.f_raw_value,
+                                                            param_data.f_value,
                                                             param_data.f_smooth_coef,
                                                             if param.f_remap != nil:
                                                                 param.f_remap(event.kindParamValMod.val_amt)
