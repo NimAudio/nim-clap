@@ -11,9 +11,13 @@ bitwig_test/*
 
 example_plugin
 example
+example2
 */*.clap
 *.clap
 *.dSYM
 !example_bundle.clap
 example_bundle.clap/Contents/MacOS/*
 !example_bundle.clap/Contents/MacOS/put_clap_executable_here.txt
+!example2.clap
+example2.clap/Contents/MacOS/*
+!example2.clap/Contents/MacOS/put_clap_executable_here.txt
