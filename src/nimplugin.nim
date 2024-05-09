@@ -101,6 +101,8 @@ type
         ui_param_data  *: seq[ParameterValue]
         dsp_param_data *: seq[ParameterValue]
         id_map         *: Table[uint32, int]
+        name_map       *: Table[string, int]
+        save_handlers  *: Table[uint32, proc (plugin: ptr Plugin, data_length: uint32, data: ptr UncheckedArray[byte]): void]
         controls_mutex *: Lock
         # basics
         latency        *: uint32
@@ -235,47 +237,15 @@ proc sync_dsp_to_ui*(plugin: ptr Plugin): void =
         for i in 0 ..< len(plugin.ui_param_data):
             cond_set(plugin.dsp_param_data[i],  plugin.ui_param_data[i])
 
-# type
-#     JSONParamValue* = object
-#         id *: uint32
-#         case kind *: ParameterKind:
-#             of pkFloat: f_raw_value *: float64
-#             of pkInt:   i_raw_value *: int64
-#             of pkBool:  b_value *: bool
-
-# converter param_val_to_json*(pval: ParameterValue): JSONParamValue =
-#     case pval.kind:
-#         of pkFloat:
-#             result = JSONParamValue(
-#                 id: pval.param.id,
-#                 kind: pkFloat,
-#                 f_raw_value: pval.f_raw_value
-#             )
-#         of pkInt:
-#             result = JSONParamValue(
-#                 id: pval.param.id,
-#                 kind: pkInt,
-#                 i_raw_value: pval.i_raw_value
-#             )
-#         of pkBool:
-#             result = JSONParamValue(
-#                 id: pval.param.id,
-#                 kind: pkBool,
-#                 b_value: pval.b_value
-#             )
-
-# type
-#     JSONSave* = object
-#         plugin_id       *: string
-#         plugin_version  *: string
-#         param_data *: seq[JSONParamValue]
-
 proc get_byte_at*[T: SomeInteger](val: T, position: int): byte =
     # result = cast[byte]((val shr (position shl 3)) and 0b1111_1111)
     result = cast[byte](val.bitsliced(position ..< position + 8))
 
 template `+`*[T](p: ptr T, off: int): ptr T =
     cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
+
+template `+`*[T](p: ptr T, off: uint): ptr T =
+    cast[ptr type(p[])](cast[uint](p) + off * uint(sizeof(p[])))
 
 proc `[]=`*[T](p: ptr[T], i: int, x: T) =
     (p + i)[] = x
@@ -295,11 +265,23 @@ proc `[]=`*[T](p: ptr[byte], i: int, x: T) =
 proc `[]`*[T](p: ptr[T], i: int): T =
     result = (p + i)[]
 
-proc read_as*[T](p: ptr[byte], i: int): T =
+proc read_as*[T](p: ptr[byte]): T =
     var temp: uint64
     for j in 0 ..< (T.sizeof):
-        temp.setMask((p + i + j)[] shl (j * 8))
+        temp.setMask((p + j)[] shl (j * 8))
     result = cast[T](temp)
+
+proc read_as*[T](data: ptr UncheckedArray[byte], offset: uint = 0): T =
+    assert T.sizeof < 8
+    var temp: uint64 = 0
+    for i in 0 ..< uint(T.sizeof):
+        temp = temp or (data[][i + offset] shl (8 * i))
+    return cast[T](temp)
+
+proc read_as_ptr*[T](data: ptr UncheckedArray[byte], offset: uint = 0): ptr T =
+    var temp = alloc0(T.sizeof)
+    copyMem(temp, data + offset, T.sizeof)
+    result = cast[ptr T](temp)
 
 proc `->`*[T](i: var int, x: T) =
     i += int(x.sizeof)
@@ -396,26 +378,26 @@ proc nim_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream):
                                 ParameterValue.f_raw_value.sizeof
                             )):
                 var i_offset = 0
-                var p_i = plugin.id_map[read_as[uint32](buffer, b_i)]
+                var p_i = plugin.id_map[read_as[uint32](buffer + b_i)]
                 var v = plugin.ui_param_data[p_i]
                 var p = plugin.params[p_i]
                 i_offset += uint32.sizeof
-                v.has_changed = read_as[bool](buffer, b_i + i_offset)
+                v.has_changed = read_as[bool](buffer + b_i + i_offset)
                 i_offset += bool.sizeof
                 case v.kind:
                     of pkFloat:
-                        v.f_raw_value = read_as[float64](buffer, b_i + i_offset)
+                        v.f_raw_value = read_as[float64](buffer + b_i + i_offset)
                         v.f_value = if p.f_remap != nil:
                                                 p.f_remap(v.f_raw_value)
                                             else:
                                                 v.f_raw_value
                     of pkInt:
-                        v.i_raw_value = read_as[int64](buffer, b_i + i_offset)
+                        v.i_raw_value = read_as[int64](buffer + b_i + i_offset)
                     of pkBool:
-                        v.b_value = read_as[bool](buffer, b_i + i_offset)
+                        v.b_value = read_as[bool](buffer + b_i + i_offset)
             var data_bytes: seq[byte]
             for i in int(buf_size) - data_byte_count ..< int(buf_size):
-                data_bytes.add(read_as[byte](buffer, i))
+                data_bytes.add(read_as[byte](buffer + i))
             if plugin.cb_data_from_bytes != nil:
                 plugin.cb_data_from_bytes(plugin, data_bytes)
             if plugin.cb_post_load != nil:
@@ -423,6 +405,107 @@ proc nim_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream):
             return true
         else:
             return false
+
+## tree of memory blobs
+##
+## key uint32
+## length uint32
+## data
+##
+## key 0 is a container of other memory blobs, which can form a tree
+## key 1 is a parameter, handled by the library
+##
+## other keys can be assigned per plugin, to allow for specialized handling, such as grouping data for a processor graph
+
+proc nim_plug_load_handle_tree*(plugin: ptr Plugin, data_length: uint32, data: ptr UncheckedArray[byte]): void =
+    var counter: uint32 = 0
+    while counter < data_length:
+        var key: uint32 = read_as[uint32](data, counter)
+        counter += uint32(uint32.sizeof)
+        var length: uint32 = read_as[uint32](data, counter)
+        counter += uint32(uint32.sizeof)
+        if counter + length < data_length:
+            plugin.save_handlers[key](plugin, length, data + counter)
+            counter += length
+
+proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data_length: uint32, data: ptr UncheckedArray[byte]): void =
+    var counter = 0'u
+    if data_length > uint32(uint8.sizeof + uint32.sizeof):
+        var kind: uint8 = read_as[uint8](data, counter)
+        counter += uint(uint8.sizeof)
+        var id: uint32 = read_as[uint32](data, counter)
+        counter += uint(uint32.sizeof)
+        var p_index = plugin.id_map[id]
+        var v = plugin.ui_param_data[p_index]
+        var p = plugin.params[p_index]
+        var contained_value: bool = false
+        case kind:
+            of 0: # float, 8 bytes
+                if data_length > uint32(uint8.sizeof + uint32.sizeof + float64.sizeof):
+                    contained_value = true
+                    case p.kind:
+                        of pkFloat: # save and plugin data match
+                            v.f_raw_value = read_as[float64](data, counter)
+                            v.f_value = if p.f_remap != nil:
+                                            p.f_remap(v.f_raw_value)
+                                        else:
+                                            v.f_raw_value
+                        of pkInt: # saved a float, loaded as int
+                            v.i_raw_value = int64(read_as[float64](data, counter))
+                            v.i_value = if p.i_remap != nil:
+                                            p.i_remap(v.i_raw_value)
+                                        else:
+                                            v.i_raw_value
+                        of pkBool: # saved a float, loaded as bool
+                            v.b_value = read_as[float64](data, counter) >= 0.5
+            of 1: # int, 8 bytes
+                if data_length > uint32(uint8.sizeof + uint32.sizeof + int64.sizeof):
+                    contained_value = true
+                    case p.kind:
+                        of pkFloat: # saved an int, loaded as float
+                            v.f_raw_value = float64(read_as[int64](data, counter))
+                            v.f_value = if p.f_remap != nil:
+                                            p.f_remap(v.f_raw_value)
+                                        else:
+                                            v.f_raw_value
+                        of pkInt: # save and plugin data match
+                            v.i_raw_value = read_as[int64](data, counter)
+                            v.i_value = if p.i_remap != nil:
+                                            p.i_remap(v.i_raw_value)
+                                        else:
+                                            v.i_raw_value
+                        of pkBool: # saved an int, loaded as bool
+                            v.b_value = read_as[int64](data, counter) >= 1
+            of 2: # bool, 1 byte
+                if data_length > uint32(uint8.sizeof + uint32.sizeof + uint8.sizeof):
+                    contained_value = true
+                    case p.kind:
+                        of pkBool: # save and plugin data match
+                            v.b_value = countSetBits(read_as[uint8](data, counter)) > 4
+                        else: # saved a bool, loaded as something else
+                            # i'm not sure you can get anything meaningful here
+                            contained_value = false
+            else:
+                discard
+        if not contained_value:
+            # the data block wasn't long enough to contain meaningful data, so just set defaults
+            case p.kind:
+                of pkFloat:
+                    var remapped = if p.f_remap != nil:
+                                    p.f_remap(p.f_default)
+                                else:
+                                    p.f_default
+                    v.f_raw_value = p.f_default
+                    v.f_value     = remapped
+                of pkInt:
+                    var remapped = if p.i_remap != nil:
+                                    p.i_remap(p.i_default)
+                                else:
+                                    p.i_default
+                    v.i_raw_value = p.i_default
+                    v.i_value     = remapped
+                of pkBool:
+                    v.b_value = p.b_default
 
 let s_nim_plug_state* = ClapPluginState(save: nim_plug_state_save, load: nim_plug_state_load)
 
