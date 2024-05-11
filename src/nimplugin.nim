@@ -87,6 +87,8 @@ type
         description *: string
         features    *: seq[string]
 
+    PluginVersion* = array[4, uint32]
+
     Plugin* = object
         # clap pointers
         clap_plugin       *: ptr ClapPlugin
@@ -102,12 +104,13 @@ type
         dsp_param_data *: seq[ParameterValue]
         id_map         *: Table[uint32, int]
         name_map       *: Table[string, int]
-        save_handlers  *: Table[uint32, proc (plugin: ptr Plugin, data_length: uint32, data: ptr UncheckedArray[byte]): void]
+        save_handlers  *: Table[uint32, proc (plugin: ptr Plugin, data: ptr UncheckedArray[byte], data_length: uint64, offset: uint64): void]
         controls_mutex *: Lock
         # basics
         latency        *: uint32
         sample_rate    *: float64
         desc           *: PluginDesc
+        version        *: PluginVersion
         # your data
         # sorry it's a raw pointer, maybe i can change it to a generic without it affecting much of unrelated procs
         # use this for like, your wavetables, filter state variables, etc
@@ -116,15 +119,24 @@ type
         # in which it contains a seq of self contained processors,
         # each with their own state, start, stop, reset, and process procs, and whatever else
         data           *: pointer
-        cb_on_start_processing *: proc (plugin: ptr Plugin): bool
-        cb_on_stop_processing  *: proc (plugin: ptr Plugin): void
-        cb_on_reset            *: proc (plugin: ptr Plugin): void
-        cb_process_block       *: proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_start, rw_end_excluded: int): void
-        cb_pre_save            *: proc (plugin: ptr Plugin): void
-        cb_data_to_bytes       *: proc (plugin: ptr Plugin): seq[byte]
-        cb_data_byte_count     *: proc (plugin: ptr Plugin): int = proc (plugin: ptr Plugin): int = return 0
-        cb_data_from_bytes     *: proc (plugin: ptr Plugin, data: seq[byte]): void
-        cb_post_load           *: proc (plugin: ptr Plugin): void
+        cb_on_start_processing           *: proc (plugin: ptr Plugin): bool
+        cb_on_stop_processing            *: proc (plugin: ptr Plugin): void
+        cb_on_reset                      *: proc (plugin: ptr Plugin): void
+        cb_process_block                 *: proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_start, rw_end_excluded: int): void
+        cb_pre_save                      *: proc (plugin: ptr Plugin): void
+        cb_data_to_bytes                 *: proc (plugin: ptr Plugin): seq[byte]
+        cb_data_byte_count               *: proc (plugin: ptr Plugin): int = proc (plugin: ptr Plugin): int = return 0
+        cb_data_from_bytes               *: proc (plugin: ptr Plugin, data: seq[byte]): void
+        cb_data_version_check            *: proc (stored, running: PluginVersion): int
+        cb_data_create_plugin_of_version *: proc (version: PluginVersion): ptr Plugin
+        cb_data_upgrade_patch            *: seq[tuple[version: PluginVersion, upgrade: proc (plugin: ptr Plugin): ptr Plugin]]
+        cb_post_load                     *: proc (plugin: ptr Plugin): void
+
+    StateTree* = object
+        key         *: uint32
+        data_length *: uint64 # do not include size of tree
+        data        *: ptr UncheckedArray[byte]
+        tree        *: seq[StateTree]
 
 
 
@@ -272,16 +284,46 @@ proc read_as*[T](p: ptr[byte]): T =
     result = cast[T](temp)
 
 proc read_as*[T](data: ptr UncheckedArray[byte], offset: uint = 0): T =
-    assert T.sizeof < 8
+    assert T.sizeof <= 8
+    # echo(T.sizeof)
     var temp: uint64 = 0
     for i in 0 ..< uint(T.sizeof):
-        temp = temp or (data[][i + offset] shl (8 * i))
+        # stdout.write("read: ")
+        # stdout.write(cast[uint64](data))
+        # stdout.write(" + ")
+        # stdout.write(i + offset)
+        # stdout.write(" byte is ")
+        # stdout.write(cast[uint64](data[i + offset]) shl (8 * i))
+        # stdout.write(" accum is ")
+        temp = temp or (cast[uint64](data[i + offset]) shl (8 * i))
+        # stdout.write(temp)
+        # stdout.write("\n")
     return cast[T](temp)
 
 proc read_as_ptr*[T](data: ptr UncheckedArray[byte], offset: uint = 0): ptr T =
     var temp = alloc0(T.sizeof)
     copyMem(temp, data + offset, T.sizeof)
     result = cast[ptr T](temp)
+
+proc read_as_walk*[T](data: ptr UncheckedArray[byte], offset: var uint64 = 0): T =
+    result = read_as[T](data, offset)
+    offset += uint64(T.sizeof)
+
+proc write_as*[T](data: ptr UncheckedArray[byte], value: T, offset: var uint64 = 0): void =
+    assert T.sizeof <= 8
+    # echo(T.sizeof)
+    for i in 0 ..< uint(T.sizeof):
+        # stdout.write("write: ")
+        # stdout.write(cast[uint64](data))
+        # stdout.write(" + ")
+        # stdout.write(i + offset)
+        # stdout.write("\n")
+        data[i + offset] = cast[byte]((cast[uint64](value) shr (8 * i)) and 0b1111_1111)
+    # copyMem(data + offset, value, T.sizeof)
+
+proc write_walk*[T](data: ptr UncheckedArray[byte], value: T, offset: var uint64 = 0): void =
+    write_as[T](data, value, offset)
+    offset += uint64(T.sizeof)
 
 proc `->`*[T](i: var int, x: T) =
     i += int(x.sizeof)
@@ -291,23 +333,6 @@ proc `<-`*[T](i: var int, x: T) =
 proc nim_plug_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
     sync_dsp_to_ui(plugin)
-    #TODO update and replace this
-    #TODO - maybe add error correction
-    #TODO - maybe store the plugin id and version and add a stored callback for version checks
-    #TODO - maybe use json, protobuf, whatever, which would allow for nested state
-    #TODO - nested state would be necessary for non-parameter stateful data
-    # var json_param_vals: seq[JSONParamValue]
-    # for i in plugin.ui_param_data:
-    #     json_param_vals.add(i)
-    # var save = JSONSave(
-    #     plugin_id: plugin.desc.id,
-    #     plugin_version: plugin.desc.version,
-    #     param_data: json_param_vals)
-    # let json_str = save.toJson()
-    # let json_size_32: uint32 = uint32(json_str.sizeof)
-    # let json_str_size: string =
-    #     json_size_32 and 1111_1111_0000_0000_0000_0000_0000_0000
-    # toBin(json_size_32, 4)
     if plugin.cb_pre_save != nil:
         plugin.cb_pre_save(plugin)
     var visible_editable_param_count = 0
@@ -409,7 +434,7 @@ proc nim_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream):
 ## tree of memory blobs
 ##
 ## key uint32
-## length uint32
+## length uint64
 ## data
 ##
 ## key 0 is a container of other memory blobs, which can form a tree
@@ -417,31 +442,82 @@ proc nim_plug_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream):
 ##
 ## other keys can be assigned per plugin, to allow for specialized handling, such as grouping data for a processor graph
 
-proc nim_plug_load_handle_tree*(plugin: ptr Plugin, data_length: uint32, data: ptr UncheckedArray[byte]): void =
-    var counter: uint32 = 0
-    while counter < data_length:
-        var key: uint32 = read_as[uint32](data, counter)
-        counter += uint32(uint32.sizeof)
-        var length: uint32 = read_as[uint32](data, counter)
-        counter += uint32(uint32.sizeof)
-        if counter + length < data_length:
-            plugin.save_handlers[key](plugin, length, data + counter)
+proc nim_plug_load_handle_tree*(plugin: ptr Plugin, data: ptr UncheckedArray[byte], data_length: uint64, offset: uint64): void =
+    var counter: uint64 = offset
+    while counter < data_length + offset:
+        var key: uint32 = read_as_walk[uint32](data, counter)
+        # echo("key: " & $key)
+        var length: uint64 = read_as_walk[uint64](data, counter)
+        # echo("len: " & $length)
+        # echo($(counter + length) & " out of " & $(data_length + offset))
+        if counter + length <= data_length + offset:
+            # echo("counter: " & $counter)
+            plugin.save_handlers[key](plugin, data, length, counter)
             counter += length
 
-proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data_length: uint32, data: ptr UncheckedArray[byte]): void =
-    var counter = 0'u
-    if data_length > uint32(uint8.sizeof + uint32.sizeof):
-        var kind: uint8 = read_as[uint8](data, counter)
-        counter += uint(uint8.sizeof)
-        var id: uint32 = read_as[uint32](data, counter)
-        counter += uint(uint32.sizeof)
+proc nim_plug_load_main*(plugin: ptr Plugin, data: ptr UncheckedArray[byte], data_length: uint64): bool =
+    var counter: uint64 = 0
+    var load_plugin_ptr: ptr Plugin
+    # var needs_upgrade: bool = false
+    # if (plugin.cb_data_version_check != nil) and
+    #     (plugin.cb_data_create_plugin_of_version != nil) and
+    #     (len(plugin.cb_data_upgrade_patch) != 0):
+    #         var version: array[4, uint32]
+    #         version[0] = read_as_walk[uint32](data, counter)
+    #         version[1] = read_as_walk[uint32](data, counter)
+    #         version[2] = read_as_walk[uint32](data, counter)
+    #         version[3] = read_as_walk[uint32](data, counter)
+    #         if plugin.cb_data_version_check(version, plugin.version) < 0:
+    #             needs_upgrade = true
+    #             load_plugin_ptr = plugin.cb_data_create_plugin_of_version(version)
+    #         else:
+    #             load_plugin_ptr = plugin
+    # else:
+    counter += sizeof(uint32) * 4
+    load_plugin_ptr = plugin
+    # error correction
+    var param_tree_key: uint32 = read_as_walk[uint32](data, counter)
+    # echo("top level tree key 0: " & $param_tree_key)
+    if param_tree_key != 0:
+        return false
+    var param_tree_length: uint64 = read_as_walk[uint64](data, counter)
+    # echo("top level tree len: " & $param_tree_length)
+    # echo($(counter + param_tree_length) & " out of " & $data_length)
+    if counter + param_tree_length <= data_length:
+        # echo("param tree fits")
+        nim_plug_load_handle_tree(load_plugin_ptr, data, param_tree_length, counter)
+        counter += param_tree_length
+        # var user_data_key: uint32 = read_as_walk[uint32](data, counter)
+        # var user_data_length: uint64 = read_as_walk[uint64](data, counter)
+        # if counter + user_data_length < data_length:
+        #     load_plugin_ptr.save_handlers[user_data_key](load_plugin_ptr, user_data_length, data + counter)
+        #     counter += user_data_length
+    # if needs_upgrade:
+    #     var upgraded_plugin_A = cast[ptr Plugin](alloc0(Plugin.sizeof))
+    #     var upgraded_plugin_B = cast[ptr Plugin](alloc0(Plugin.sizeof))
+    #     copyMem(upgraded_plugin_A, load_plugin_ptr, Plugin.sizeof)
+    #     for upgrade in load_plugin_ptr.cb_data_upgrade_patch:
+    #         if load_plugin_ptr.cb_data_version_check(upgrade.version, load_plugin_ptr.version) > 0:
+    #             upgraded_plugin_B = upgrade.upgrade(upgraded_plugin_A)
+    #             swap(upgraded_plugin_A, upgraded_plugin_B)
+    #             # ensure that each upgrade call can be done with an untouched copy as it writes the new copy
+    #     # set to A, use A to write B, swap to return to A
+    #     copyMem(plugin, upgraded_plugin_A, Plugin.sizeof)
+
+proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data: ptr UncheckedArray[byte], data_length: uint64, offset: uint64): void =
+    var counter: uint64 = offset
+    if data_length > uint64(uint8.sizeof + uint32.sizeof):
+        var id: uint32 = read_as_walk[uint32](data, counter)
+        # echo("id: " & $id)
+        var kind: uint8 = read_as_walk[uint8](data, counter)
+        # echo("kind: " & $kind)
         var p_index = plugin.id_map[id]
         var v = plugin.ui_param_data[p_index]
         var p = plugin.params[p_index]
         var contained_value: bool = false
         case kind:
-            of 0: # float, 8 bytes
-                if data_length > uint32(uint8.sizeof + uint32.sizeof + float64.sizeof):
+            of 0'u8: # float, 8 bytes
+                if data_length > uint64(uint8.sizeof + uint32.sizeof + float64.sizeof):
                     contained_value = true
                     case p.kind:
                         of pkFloat: # save and plugin data match
@@ -458,8 +534,8 @@ proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data_length: uint32, da
                                             v.i_raw_value
                         of pkBool: # saved a float, loaded as bool
                             v.b_value = read_as[float64](data, counter) >= 0.5
-            of 1: # int, 8 bytes
-                if data_length > uint32(uint8.sizeof + uint32.sizeof + int64.sizeof):
+            of 1'u8: # int, 8 bytes
+                if data_length > uint64(uint8.sizeof + uint32.sizeof + int64.sizeof):
                     contained_value = true
                     case p.kind:
                         of pkFloat: # saved an int, loaded as float
@@ -476,8 +552,8 @@ proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data_length: uint32, da
                                             v.i_raw_value
                         of pkBool: # saved an int, loaded as bool
                             v.b_value = read_as[int64](data, counter) >= 1
-            of 2: # bool, 1 byte
-                if data_length > uint32(uint8.sizeof + uint32.sizeof + uint8.sizeof):
+            of 2'u8: # bool, 1 byte
+                if data_length > uint64(uint8.sizeof + uint32.sizeof + uint8.sizeof):
                     contained_value = true
                     case p.kind:
                         of pkBool: # save and plugin data match
@@ -506,6 +582,69 @@ proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data_length: uint32, da
                     v.i_value     = remapped
                 of pkBool:
                     v.b_value = p.b_default
+
+proc nim_plug_save_total_lengths*(plugin: ptr Plugin, state: var StateTree): uint64 =
+    if len(state.tree) != 0:
+        var total: uint64 = 0
+        for t in state.tree.mitems:
+            total += nim_plug_save_total_lengths(plugin, t)
+        state.data_length += total
+    return state.data_length
+
+proc nim_plug_save_flatten_state_tree*(plugin: ptr Plugin, state: StateTree): ptr UncheckedArray[byte] =
+    # var counter: uint64 = 0
+    # write_walk[uint32](result, state.key, counter)
+    discard
+
+proc nim_plug_save_param_tree_size*(plugin: ptr Plugin): uint64 =
+    result += uint64(uint32.sizeof)
+    result += uint64(uint64.sizeof)
+    for pv in plugin.ui_param_data:
+        result += uint64(uint32.sizeof)
+        result += uint64(uint64.sizeof)
+        result += uint64(uint32.sizeof)
+        case pv.kind:
+            of pkFloat:
+                result += uint64(uint8.sizeof)
+                result += uint64(float64.sizeof)
+            of pkInt:
+                result += uint64(uint8.sizeof)
+                result += uint64(int64.sizeof)
+            of pkBool:
+                result += uint64(uint8.sizeof)
+                result += uint64(uint8.sizeof)
+
+proc nim_plug_save_param_tree*(plugin: ptr Plugin, data: ptr UncheckedArray[byte], offset: uint64): void =
+    var counter: uint64 = offset
+    write_walk[uint32](data, 0'u32, counter) # identify as tree blob
+    var length_position = counter # copy of location of total size
+    write_walk[uint64](data, 0'u64, counter) # length
+    for pv in plugin.ui_param_data:
+        write_walk[uint32](data, 1'u32, counter)
+        var param_length_position = counter # copy of location of total size
+        write_walk[uint64](data, 0'u64, counter) # param length
+        var p = pv.param
+        write_walk[uint32](data, p.id, counter)
+        case pv.kind:
+            of pkFloat:
+                write_walk[uint8](data, 0'u8, counter)
+                write_walk[float64](data, pv.f_raw_value, counter)
+            of pkInt:
+                write_walk[uint8](data, 1'u8, counter)
+                write_walk[int64](data, pv.i_raw_value, counter)
+            of pkBool:
+                write_walk[uint8](data, 2'u8, counter)
+                write_walk[uint8](data, if pv.b_value: 0b1111_1111 else: 0b0000_0000, counter)
+        write_as[uint64](data, counter - param_length_position - uint64(uint64.sizeof), param_length_position)
+    write_as[uint64](data, counter - length_position - uint64(uint64.sizeof), length_position)
+
+proc nim_plug_save_main*(plugin: ptr Plugin, data: ptr UncheckedArray[byte]): void =
+    var counter: uint64 = 0
+    write_walk[uint32](data, plugin.version[0], counter)
+    write_walk[uint32](data, plugin.version[1], counter)
+    write_walk[uint32](data, plugin.version[2], counter)
+    write_walk[uint32](data, plugin.version[3], counter)
+    nim_plug_save_param_tree(plugin, data, counter)
 
 let s_nim_plug_state* = ClapPluginState(save: nim_plug_state_save, load: nim_plug_state_load)
 

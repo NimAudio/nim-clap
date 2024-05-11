@@ -21,3 +21,5 @@ example_bundle.clap/Contents/MacOS/*
 !example2.clap
 example2.clap/Contents/MacOS/*
 !example2.clap/Contents/MacOS/put_clap_executable_here.txt
+
+memory_roundtrip_test
