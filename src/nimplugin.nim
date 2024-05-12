@@ -1,5 +1,5 @@
 import clap
-import std/[locks, math, strutils, bitops, tables, algorithm, genasts]
+import std/[locks, math, strutils, bitops, tables, algorithm]
 # import jsony
 export clap
 
@@ -150,7 +150,7 @@ proc nim_plug_audio_ports_get*(clap_plugin: ptr ClapPlugin,
     if index > 0:
         return false
     info.id = 0.ClapID
-    echo(info.name)
+    # echo(info.name)
     info.channel_count = 2
     info.flags = {capfIS_MAIN}
     info.port_type = CLAP_PORT_STEREO
@@ -194,8 +194,10 @@ proc cond_set*(c_to, c_from: var ParameterValue): void =
         case c_from.kind:
             of pkFloat:
                 c_to.f_raw_value = c_from.f_raw_value
+                c_to.f_value = c_from.f_value
             of pkInt:
                 c_to.i_raw_value = c_from.i_raw_value
+                c_to.i_value = c_from.i_value
             of pkBool:
                 c_to.b_value = c_from.b_value
 
@@ -207,9 +209,11 @@ proc cond_set_with_event*(c_to, c_from: var ParameterValue, id: ClapID, output: 
         case c_from.kind:
             of pkFloat:
                 c_to.f_raw_value = c_from.f_raw_value
+                c_to.f_value = c_from.f_value
                 value = c_from.f_raw_value
             of pkInt:
                 c_to.i_raw_value = c_from.i_raw_value
+                c_to.i_value = c_from.i_value
                 value = float64(c_from.i_raw_value)
             of pkBool:
                 c_to.b_value = c_from.b_value
@@ -247,7 +251,7 @@ proc sync_ui_to_dsp*(plugin: ptr Plugin, output: ptr ClapOutputEvents): void =
 proc sync_dsp_to_ui*(plugin: ptr Plugin): void =
     withLock(plugin.controls_mutex):
         for i in 0 ..< len(plugin.ui_param_data):
-            cond_set(plugin.dsp_param_data[i],  plugin.ui_param_data[i])
+            cond_set(plugin.ui_param_data[i],  plugin.dsp_param_data[i])
 
 proc get_byte_at*[T: SomeInteger](val: T, position: int): byte =
     # result = cast[byte]((val shr (position shl 3)) and 0b1111_1111)
@@ -258,6 +262,9 @@ template `+`*[T](p: ptr T, off: int): ptr T =
 
 template `+`*[T](p: ptr T, off: uint): ptr T =
     cast[ptr type(p[])](cast[uint](p) + off * uint(sizeof(p[])))
+
+template `+`*(p: pointer, off: uint): pointer =
+    cast[pointer](cast[uint](p) + off)
 
 proc `[]=`*[T](p: ptr[T], i: int, x: T) =
     (p + i)[] = x
@@ -479,6 +486,7 @@ proc nim_plug_load_main*(plugin: ptr Plugin, data: ptr UncheckedArray[byte], dat
     var param_tree_key: uint32 = read_as_walk[uint32](data, counter)
     # echo("top level tree key 0: " & $param_tree_key)
     if param_tree_key != 0:
+        # echo("top level tree does not exist")
         return false
     var param_tree_length: uint64 = read_as_walk[uint64](data, counter)
     # echo("top level tree len: " & $param_tree_length)
@@ -492,6 +500,9 @@ proc nim_plug_load_main*(plugin: ptr Plugin, data: ptr UncheckedArray[byte], dat
         # if counter + user_data_length < data_length:
         #     load_plugin_ptr.save_handlers[user_data_key](load_plugin_ptr, user_data_length, data + counter)
         #     counter += user_data_length
+    else:
+        # echo("param tree does not fit")
+        return false
     # if needs_upgrade:
     #     var upgraded_plugin_A = cast[ptr Plugin](alloc0(Plugin.sizeof))
     #     var upgraded_plugin_B = cast[ptr Plugin](alloc0(Plugin.sizeof))
@@ -503,6 +514,7 @@ proc nim_plug_load_main*(plugin: ptr Plugin, data: ptr UncheckedArray[byte], dat
     #             # ensure that each upgrade call can be done with an untouched copy as it writes the new copy
     #     # set to A, use A to write B, swap to return to A
     #     copyMem(plugin, upgraded_plugin_A, Plugin.sizeof)
+    return true
 
 proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data: ptr UncheckedArray[byte], data_length: uint64, offset: uint64): void =
     var counter: uint64 = offset
@@ -517,53 +529,61 @@ proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data: ptr UncheckedArra
         var contained_value: bool = false
         case kind:
             of 0'u8: # float, 8 bytes
-                if data_length > uint64(uint8.sizeof + uint32.sizeof + float64.sizeof):
+                if data_length >= uint64(uint8.sizeof + uint32.sizeof + float64.sizeof):
                     contained_value = true
                     case p.kind:
                         of pkFloat: # save and plugin data match
                             v.f_raw_value = read_as[float64](data, counter)
+                            # echo("f_raw: " & $v.f_raw_value)
                             v.f_value = if p.f_remap != nil:
                                             p.f_remap(v.f_raw_value)
                                         else:
                                             v.f_raw_value
                         of pkInt: # saved a float, loaded as int
                             v.i_raw_value = int64(read_as[float64](data, counter))
+                            # echo("i_raw: " & $v.i_raw_value)
                             v.i_value = if p.i_remap != nil:
                                             p.i_remap(v.i_raw_value)
                                         else:
                                             v.i_raw_value
                         of pkBool: # saved a float, loaded as bool
                             v.b_value = read_as[float64](data, counter) >= 0.5
+                            # echo("b_val: " & $v.b_value)
             of 1'u8: # int, 8 bytes
-                if data_length > uint64(uint8.sizeof + uint32.sizeof + int64.sizeof):
+                if data_length >= uint64(uint8.sizeof + uint32.sizeof + int64.sizeof):
                     contained_value = true
                     case p.kind:
                         of pkFloat: # saved an int, loaded as float
                             v.f_raw_value = float64(read_as[int64](data, counter))
+                            # echo("f_raw: " & $v.f_raw_value)
                             v.f_value = if p.f_remap != nil:
                                             p.f_remap(v.f_raw_value)
                                         else:
                                             v.f_raw_value
                         of pkInt: # save and plugin data match
                             v.i_raw_value = read_as[int64](data, counter)
+                            # echo("i_raw: " & $v.i_raw_value)
                             v.i_value = if p.i_remap != nil:
                                             p.i_remap(v.i_raw_value)
                                         else:
                                             v.i_raw_value
                         of pkBool: # saved an int, loaded as bool
                             v.b_value = read_as[int64](data, counter) >= 1
+                            # echo("b_val: " & $v.b_value)
             of 2'u8: # bool, 1 byte
-                if data_length > uint64(uint8.sizeof + uint32.sizeof + uint8.sizeof):
+                if data_length >= uint64(uint8.sizeof + uint32.sizeof + uint8.sizeof):
                     contained_value = true
                     case p.kind:
                         of pkBool: # save and plugin data match
                             v.b_value = countSetBits(read_as[uint8](data, counter)) > 4
+                            # echo("b_val: " & $v.b_value)
                         else: # saved a bool, loaded as something else
                             # i'm not sure you can get anything meaningful here
                             contained_value = false
             else:
                 discard
         if not contained_value:
+            # echo("setting default")
             # the data block wasn't long enough to contain meaningful data, so just set defaults
             case p.kind:
                 of pkFloat:
@@ -582,6 +602,7 @@ proc nim_plug_load_handle_parameter*(plugin: ptr Plugin, data: ptr UncheckedArra
                     v.i_value     = remapped
                 of pkBool:
                     v.b_value = p.b_default
+        v.has_changed = true
 
 proc nim_plug_save_total_lengths*(plugin: ptr Plugin, state: var StateTree): uint64 =
     if len(state.tree) != 0:
@@ -646,7 +667,125 @@ proc nim_plug_save_main*(plugin: ptr Plugin, data: ptr UncheckedArray[byte]): vo
     write_walk[uint32](data, plugin.version[3], counter)
     nim_plug_save_param_tree(plugin, data, counter)
 
-let s_nim_plug_state* = ClapPluginState(save: nim_plug_state_save, load: nim_plug_state_load)
+proc nim_plug_new_state_save*(clap_plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.cdecl.} =
+    # echo("\n\nstart save")
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+    sync_dsp_to_ui(plugin)
+    if plugin.cb_pre_save != nil:
+        plugin.cb_pre_save(plugin)
+    # for i in 0 ..< len(plugin.params):
+    #     var p_d = plugin.dsp_param_data[i]
+    #     var p_u = plugin.ui_param_data[i]
+    #     stdout.write("id" & $plugin.params[i].id & ":")
+    #     case plugin.params[i].kind:
+    #         of pkFloat:
+    #             stdout.write(" " & $p_d.f_value)
+    #             stdout.write(" " & $p_d.f_raw_value)
+    #             stdout.write(" " & $p_u.f_value)
+    #             stdout.write(" " & $p_u.f_raw_value)
+    #         of pkInt:
+    #             stdout.write(" " & $p_d.i_value)
+    #             stdout.write(" " & $p_d.i_raw_value)
+    #             stdout.write(" " & $p_u.i_value)
+    #             stdout.write(" " & $p_u.i_raw_value)
+    #         of pkBool:
+    #             stdout.write(" " & $p_d.b_value)
+    #             stdout.write(" " & $p_u.b_value)
+    #     stdout.write("\n")
+    var buf_size = nim_plug_save_param_tree_size(plugin) + 16 # version struct
+    var buffer: ptr UncheckedArray[byte] = cast[ptr UncheckedArray[byte]](alloc0(buf_size))
+    nim_plug_save_main(plugin, buffer)
+    # stdout.write("saving: ")
+    # for i in 0 ..< buf_size:
+    #     stdout.write(buffer[i])
+    #     stdout.write(" ")
+    # stdout.write("end\n")
+    var written_size = 0'u64
+    while written_size < buf_size:
+        let status = stream.write(stream, cast[pointer](buffer) + written_size, buf_size - written_size)
+        if status > 0:
+            # echo("wrote " & $status & " bytes")
+            written_size += uint64(status)
+        else: # error
+            # echo("write status: " & $status)
+            dealloc(buffer)
+            return false
+    dealloc(buffer)
+    return true
+
+proc nim_plug_new_state_load*(clap_plugin: ptr ClapPlugin, stream: ptr ClapIStream): bool {.cdecl.} =
+    # echo("\n\nstart load")
+    var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
+    var buf_size = nim_plug_save_param_tree_size(plugin) + 16 # + version struct
+    var buffer: ptr UncheckedArray[byte] = cast[ptr UncheckedArray[byte]](alloc0(buf_size))
+    var read_size = 0'u64
+    var status = 1
+    var last_loop_reallocated = false
+    while status >= 0:
+        # echo("asking for " & $(buf_size - read_size) & " bytes, writing with offset " & $read_size)
+        status = stream.read(stream, cast[pointer](buffer) + read_size, uint64(buf_size - read_size))
+        if status == 0:
+            break # finished reading
+        elif status < 0:
+            # echo("read status: " & $status)
+            return false # error
+        else:
+            # echo("read " & $status & " bytes")
+            read_size += uint64(status)
+            if read_size > buf_size:
+                var new_size: uint64 = read_size
+                if last_loop_reallocated: # try to avoid reallocating every time
+                    new_size += 2048
+                else:
+                    new_size += 256
+                buffer = cast[ptr UncheckedArray[byte]](realloc0(buffer, buf_size, new_size))
+                buf_size = new_size
+                last_loop_reallocated = true
+    if read_size < nim_plug_save_param_tree_size(plugin) + 16:
+        # echo("read_size too small: " & $read_size)
+        return false
+    # stdout.write("loading: ")
+    # for i in 0 ..< read_size:
+    #     stdout.write(buffer[i])
+    #     stdout.write(" ")
+    # stdout.write("end\n")
+    var load_main_result = nim_plug_load_main(plugin, buffer, read_size)
+    # for i in 0 ..< len(plugin.params):
+    #     var p_d = plugin.dsp_param_data[i]
+    #     var p_u = plugin.ui_param_data[i]
+    #     stdout.write("id" & $plugin.params[i].id & ":")
+    #     case plugin.params[i].kind:
+    #         of pkFloat:
+    #             stdout.write(" " & $p_d.f_value)
+    #             stdout.write(" " & $p_d.f_raw_value)
+    #             stdout.write(" " & $p_u.f_value)
+    #             stdout.write(" " & $p_u.f_raw_value)
+    #         of pkInt:
+    #             stdout.write(" " & $p_d.i_value)
+    #             stdout.write(" " & $p_d.i_raw_value)
+    #             stdout.write(" " & $p_u.i_value)
+    #             stdout.write(" " & $p_u.i_raw_value)
+    #         of pkBool:
+    #             stdout.write(" " & $p_d.b_value)
+    #             stdout.write(" " & $p_u.b_value)
+    #     stdout.write("\n")
+    dealloc(buffer)
+    return load_main_result
+    # for i in 0 ..< len(plugin.params):
+    #     # doesn't consider the changed value, just sets all
+    #     var p_d = plugin.dsp_param_data[i]
+    #     var p_u = plugin.ui_param_data[i]
+    #     case plugin.params[i].kind:
+    #         of pkFloat:
+    #             p_d.f_raw_value = p_u.f_raw_value
+    #             p_d.f_value = p_u.f_value
+    #         of pkInt:
+    #             p_d.i_raw_value = p_u.i_raw_value
+    #             p_d.i_value = p_u.i_value
+    #         of pkBool:
+    #             p_d.b_value = p_u.b_value
+
+let s_nim_plug_state* = ClapPluginState(save: nim_plug_new_state_save, load: nim_plug_new_state_load)
 
 
 
@@ -1351,6 +1490,8 @@ proc nim_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
     plugin.clap_plugin.on_main_thread = nim_plug_on_main_thread
     plugin.params = nim_plug_params
     plugin.id_map = nim_plug_id_map
+    plugin.save_handlers[0'u32] = nim_plug_load_handle_tree
+    plugin.save_handlers[1'u32] = nim_plug_load_handle_parameter
     plugin.dsp_param_data = @[]
     plugin.ui_param_data = @[]
     for i in 0 ..< len(plugin.params):

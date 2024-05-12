@@ -4,7 +4,7 @@ import std/[tables]
 
 var params*: seq[Parameter] = @[]
 
-params.add(newBoolParameter("bool", true, uint32(0)))
+# params.add(newBoolParameter("bool", true, uint32(0)))
 
 ## if just one bool, saved buffer should be
 ## 0 * 4 (uint32) * 4 (four of them) (version)
@@ -19,11 +19,36 @@ params.add(newBoolParameter("bool", true, uint32(0)))
 # params.add(newIntParameter("int", -1, 53, 31, uint32(1)))
 # params.add(newFloatParameter("float", 0.0, 1.0, 0.33333333, uint32(2), 10))
 
-for i in 1 .. 10:
-    if i mod 3 == 0:
-        params.add(newIntParameter($i & "int", -i, i, i, uint32(i)))
-    else:
-        params.add(newFloatParameter($i & "float", 0.0, float(i), 0.3333 + 0.01 * float(i), uint32(i), 10))
+# for i in 1 .. 10:
+#     if i mod 3 == 0:
+#         params.add(newIntParameter($i & "int", -i, i, i, uint32(i)))
+#     else:
+#         params.add(newFloatParameter($i & "float", 0.0, float(i), 0.3333 + 0.01 * float(i), uint32(i), 10))
+
+params.add newFloatParameter(
+    "Level",
+    -48,
+    24,
+    0,
+    0'u32,
+    5
+)
+params.add newFloatParameter(
+    "Flip",
+    0,
+    1,
+    0,
+    1'u32,
+    5
+)
+params.add newFloatParameter(
+    "Rotate",
+    -1,
+    1,
+    0,
+    2'u32,
+    5
+)
 
 var id_map* = params.id_table()
 
