@@ -1378,6 +1378,10 @@ proc id_table*(params: seq[Parameter]): Table[uint32, int] =
     for i in 0 ..< len(params):
         result[params[i].id] = i
 
+proc name_table*(params: seq[Parameter]): Table[string, int] =
+    for i in 0 ..< len(params):
+        result[params[i].name] = i
+
 
 
 #93F6E9 --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
@@ -1424,6 +1428,7 @@ proc nim_plug_get_extension*(clap_plugin: ptr ClapPlugin, id: cstring): pointer 
 var nim_plug_desc     *: ClapPluginDescriptor
 var nim_plug_params   *: seq[Parameter]
 var nim_plug_id_map   *: Table[uint32, int]
+var nim_plug_name_map *: Table[string, int]
 var cb_process_sample *: proc (plugin: ptr Plugin, in_left, in_right: float64, out_left, out_right: var float64, latency: uint32): void
 
 var nim_plug_user_data *: pointer = nil
@@ -1535,24 +1540,25 @@ proc nim_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
     var plugin = cast[ptr Plugin](alloc0(Plugin.sizeof))
     plugin.host = host
     plugin.clap_plugin = cast[ptr ClapPlugin](alloc0(ClapPlugin.sizeof)) # remove if changed to not a pointer
-    plugin.clap_plugin.desc = addr nim_plug_desc
-    plugin.clap_plugin.plugin_data = plugin
-    plugin.clap_plugin.init = nim_plug_init
-    plugin.clap_plugin.destroy = nim_plug_destroy
-    plugin.clap_plugin.activate = nim_plug_activate
-    plugin.clap_plugin.deactivate = nim_plug_deactivate
+    plugin.clap_plugin.desc             = addr nim_plug_desc
+    plugin.clap_plugin.plugin_data      = plugin
+    plugin.clap_plugin.init             = nim_plug_init
+    plugin.clap_plugin.destroy          = nim_plug_destroy
+    plugin.clap_plugin.activate         = nim_plug_activate
+    plugin.clap_plugin.deactivate       = nim_plug_deactivate
     plugin.clap_plugin.start_processing = nim_plug_start_processing
-    plugin.clap_plugin.stop_processing = nim_plug_stop_processing
-    plugin.clap_plugin.reset = nim_plug_reset
-    plugin.clap_plugin.process = nim_plug_process
-    plugin.clap_plugin.get_extension = nim_plug_get_extension
-    plugin.clap_plugin.on_main_thread = nim_plug_on_main_thread
-    plugin.params = nim_plug_params
-    plugin.id_map = nim_plug_id_map
+    plugin.clap_plugin.stop_processing  = nim_plug_stop_processing
+    plugin.clap_plugin.reset            = nim_plug_reset
+    plugin.clap_plugin.process          = nim_plug_process
+    plugin.clap_plugin.get_extension    = nim_plug_get_extension
+    plugin.clap_plugin.on_main_thread   = nim_plug_on_main_thread
+    plugin.params   = nim_plug_params
+    plugin.id_map   = nim_plug_id_map
+    plugin.name_map = nim_plug_name_map
     plugin.save_handlers[0'u32] = nim_plug_load_handle_tree
     plugin.save_handlers[1'u32] = nim_plug_load_handle_parameter
     plugin.dsp_param_data = @[]
-    plugin.ui_param_data = @[]
+    plugin.ui_param_data  = @[]
     for i in 0 ..< len(plugin.params):
         plugin.dsp_param_data.add(ParameterValue(
             param: plugin.params[i],
