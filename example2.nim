@@ -13,7 +13,8 @@ var p_gain * = newFloatParameter(
     24,
     0,
     0'u32,
-    5,
+    smLerp,
+    100,
     proc (s: string): float64 = float64(parseFloat(s.strip().split(" ")[0])),
     proc (x: float64): string = x.formatBiggestFloat(ffDecimal, 6) & " db",
     db_af
@@ -24,7 +25,8 @@ var p_flip * = newFloatParameter(
     1,
     0,
     1'u32,
-    5
+    smLerp,
+    100
 )
 var p_rotate * = newFloatParameter(
     "Rotate",
@@ -32,7 +34,8 @@ var p_rotate * = newFloatParameter(
     1,
     0,
     2'u32,
-    5,
+    smLerp,
+    100,
     remap = proc (x: float64): float64 = PI * x
 )
 
