@@ -57,24 +57,15 @@ let desc * = PluginDesc(
 proc lerp*(x, y, mix: float32): float32 =
     result = (y - x) * mix + x
 
-proc process*(plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_start, rw_end_excluded: int): void =
-    for i in rw_start ..< rw_end_excluded:
-        let in_l: float32 = clap_process.audio_inputs[0].data32[0][i]
-        let in_r: float32 = clap_process.audio_inputs[0].data32[1][i]
-
-        # let out_l = in_r * 0.5
-        # let out_r = in_l
-        var scaled_l = plugin.dsp_param_data[0].f_value * in_l
-        var scaled_r = plugin.dsp_param_data[0].f_value * in_r
-        var flipped_l = lerp(scaled_l, scaled_r, plugin.dsp_param_data[1].f_value)
-        var flipped_r = lerp(scaled_r, scaled_l, plugin.dsp_param_data[1].f_value)
-        let a_cos: float32 = cos(plugin.dsp_param_data[2].f_value)
-        let a_sin: float32 = sin(plugin.dsp_param_data[2].f_value)
-        var out_l = flipped_l * a_cos + flipped_r * a_sin
-        var out_r = flipped_r * a_cos - flipped_l * a_sin
-
-        clap_process.audio_outputs[0].data32[0][i] = out_l
-        clap_process.audio_outputs[0].data32[1][i] = out_r
+proc process*(plugin: ptr Plugin, in_left, in_right: float64, out_left, out_right: var float64, latency: uint32): void =
+    var scaled_l = plugin.dsp_param_data[0].f_value * in_left
+    var scaled_r = plugin.dsp_param_data[0].f_value * in_right
+    var flipped_l = lerp(scaled_l, scaled_r, plugin.dsp_param_data[1].f_value)
+    var flipped_r = lerp(scaled_r, scaled_l, plugin.dsp_param_data[1].f_value)
+    let a_cos: float32 = cos(plugin.dsp_param_data[2].f_value)
+    let a_sin: float32 = sin(plugin.dsp_param_data[2].f_value)
+    out_left = flipped_l * a_cos + flipped_r * a_sin
+    out_right = flipped_r * a_cos - flipped_l * a_sin
 
 let features*: cstringArray = allocCStringArray([CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
                                                 CLAP_PLUGIN_FEATURE_EQUALIZER,
@@ -97,7 +88,7 @@ let clap_desc* = ClapPluginDescriptor(
         features    : features)
 
 # nim_plug_desc    = desc
-nim_plug_desc    = clap_desc
-nim_plug_params  = params
-nim_plug_id_map  = id_map
-cb_process_block = process
+nim_plug_desc     = clap_desc
+nim_plug_params   = params
+nim_plug_id_map   = id_map
+cb_process_sample = process

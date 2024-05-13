@@ -26,6 +26,11 @@ type
         pkInt,
         pkBool
 
+    SmoothMode* = enum
+        smNone,
+        smFilter,
+        smLerp
+
     Parameter* = ref object
         name *: string
         path *: string
@@ -37,7 +42,10 @@ type
                 f_as_value      *: proc (str: string): float64
                 f_as_string     *: proc (val: float64): string
                 f_remap         *: proc (val: float64): float64
-                f_smooth_cutoff *: float64
+                f_smooth_cutoff *: float64 = 10
+                f_smooth_ms     *: float64 = 50
+                f_smooth_mode   *: SmoothMode = smLerp
+                f_calculate     *: proc (plugin: ptr Plugin, val: float64, id: int): void = nil
             of pkInt:
                 i_min       *: int64
                 i_max       *: int64
@@ -66,9 +74,13 @@ type
         param *: Parameter
         case kind *: ParameterKind:
             of pkFloat:
-                f_raw_value   *: float64
-                f_value       *: float64
-                f_smooth_coef *: float64
+                f_raw_value             *: float64
+                f_next_value            *: float64
+                f_value                 *: float64
+                f_smooth_coef           *: float64
+                f_smooth_samples        *: uint64
+                f_smooth_step           *: float64
+                f_smooth_sample_counter *: uint64
             of pkInt:
                 i_raw_value *: int64
                 i_value     *: int64
@@ -99,18 +111,19 @@ type
         host_state        *: ptr ClapHostState
         host_params       *: ptr ClapHostParams
         # managed data
-        params         *: seq[Parameter]
-        ui_param_data  *: seq[ParameterValue]
-        dsp_param_data *: seq[ParameterValue]
-        id_map         *: Table[uint32, int]
-        name_map       *: Table[string, int]
-        save_handlers  *: Table[uint32, proc (plugin: ptr Plugin, data: ptr UncheckedArray[byte], data_length: uint64, offset: uint64): void]
-        controls_mutex *: Lock
+        params          *: seq[Parameter]
+        ui_param_data   *: seq[ParameterValue]
+        dsp_param_data  *: seq[ParameterValue]
+        smoothed_params *: seq[int] # indices into arrays
+        id_map          *: Table[uint32, int]
+        name_map        *: Table[string, int]
+        save_handlers   *: Table[uint32, proc (plugin: ptr Plugin, data: ptr UncheckedArray[byte], data_length: uint64, offset: uint64): void]
+        controls_mutex  *: Lock
         # basics
-        latency        *: uint32
-        sample_rate    *: float64
-        desc           *: PluginDesc
-        version        *: PluginVersion
+        latency     *: uint32
+        sample_rate *: float64
+        desc        *: PluginDesc
+        version     *: PluginVersion
         # your data
         # sorry it's a raw pointer, maybe i can change it to a generic without it affecting much of unrelated procs
         # use this for like, your wavetables, filter state variables, etc
@@ -118,11 +131,11 @@ type
         # in the future, i would like to create a multi-process system,
         # in which it contains a seq of self contained processors,
         # each with their own state, start, stop, reset, and process procs, and whatever else
-        data           *: pointer
+        data *: pointer
         cb_on_start_processing           *: proc (plugin: ptr Plugin): bool
         cb_on_stop_processing            *: proc (plugin: ptr Plugin): void
         cb_on_reset                      *: proc (plugin: ptr Plugin): void
-        cb_process_block                 *: proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_start, rw_end_excluded: int): void
+        cb_process_sample                *: proc (plugin: ptr Plugin, in_left, in_right: float64, out_left, out_right: var float64, latency: uint32): void
         cb_pre_save                      *: proc (plugin: ptr Plugin): void
         cb_data_to_bytes                 *: proc (plugin: ptr Plugin): seq[byte]
         cb_data_byte_count               *: proc (plugin: ptr Plugin): int = proc (plugin: ptr Plugin): int = return 0
@@ -854,20 +867,27 @@ proc nim_plug_process_event*(plugin: ptr Plugin, event: ptr ClapEventUnion): voi
                     var param = plugin.params[index]
                     case param.kind:
                         of pkFloat:
+                            var last_value = param_data.f_value
                             param_data.f_raw_value = event.kindParamValMod.val_amt
-                            param_data.f_value = simple_lp(
-                                                            param_data.f_value,
-                                                            param_data.f_smooth_coef,
-                                                            if param.f_remap != nil:
-                                                                param.f_remap(event.kindParamValMod.val_amt)
-                                                            else:
-                                                                event.kindParamValMod.val_amt)
+                            param_data.f_next_value = if param.f_remap != nil:
+                                                        param.f_remap(event.kindParamValMod.val_amt)
+                                                    else:
+                                                        event.kindParamValMod.val_amt
                             param_data.has_changed = true # maybe set up converters to set this and automatically handle conversion based on kind
+                            case param.f_smooth_mode:
+                                of smLerp:
+                                    param_data.f_smooth_sample_counter = param_data.f_smooth_samples
+                                    param_data.f_smooth_step = (param_data.f_next_value - last_value) / float64(param_data.f_smooth_samples)
+                                of smFilter:
+                                    discard
+                                of smNone:
+                                    param_data.f_value = param_data.f_next_value
                         of pkInt:
-                            param_data.i_raw_value = if param.i_remap != nil:
-                                                    param.i_remap(int64(event.kindParamValMod.val_amt))
-                                                else:
-                                                    int64(event.kindParamValMod.val_amt)
+                            param_data.i_raw_value = int64(event.kindParamValMod.val_amt)
+                            param_data.i_value = if param.i_remap != nil:
+                                                        param.i_remap(param_data.i_raw_value)
+                                                    else:
+                                                        param_data.i_raw_value
                             param_data.has_changed = true
                         of pkBool:
                             param_data.b_value = event.kindParamValMod.val_amt > 0.5
@@ -904,34 +924,50 @@ proc nim_plug_process*(clap_plugin: ptr ClapPlugin, process: ptr ClapProcess): C
                 next_event_frame = num_frames
                 break
 
-        plugin.cb_process_block(plugin, process, int(i), int(next_event_frame))
-        i = next_event_frame
-        # while i < next_event_frame:
-        #     discard plugin.audio_data.smoothed_level
-        #                 .simple_lp(plugin.smooth_coef, db_af(plugin.dsp_controls.level))
-        #     discard plugin.audio_data.smoothed_flip
-        #                 .simple_lp(plugin.smooth_coef, plugin.dsp_controls.flip)
-        #     discard plugin.audio_data.smoothed_rotate
-        #                 .simple_lp(plugin.smooth_coef, pi * plugin.dsp_controls.rotate)
-
-        #     let in_l: float32 = process.audio_inputs[0].data32[0][i]
-        #     let in_r: float32 = process.audio_inputs[0].data32[1][i]
-
-        #     # let out_l = in_r * 0.5
-        #     # let out_r = in_l
-        #     var scaled_l = plugin.audio_data.smoothed_level * in_l
-        #     var scaled_r = plugin.audio_data.smoothed_level * in_r
-        #     var flipped_l = lerp(scaled_l, scaled_r, plugin.audio_data.smoothed_flip)
-        #     var flipped_r = lerp(scaled_r, scaled_l, plugin.audio_data.smoothed_flip)
-        #     let a_cos: float32 = cos(plugin.audio_data.smoothed_rotate)
-        #     let a_sin: float32 = sin(plugin.audio_data.smoothed_rotate)
-        #     var out_l = flipped_l * a_cos + flipped_r * a_sin
-        #     var out_r = flipped_r * a_cos - flipped_l * a_sin
-
-        #     process.audio_outputs[0].data32[0][i] = out_l
-        #     process.audio_outputs[0].data32[1][i] = out_r
-
-        #     i += 1
+        # i = next_event_frame
+        while i < next_event_frame:
+            for p in plugin.smoothed_params:
+                if plugin.params[p].kind == pkFloat:
+                    var param_data = plugin.dsp_param_data[p]
+                    case plugin.params[p].f_smooth_mode:
+                        of smLerp:
+                            if param_data.f_smooth_sample_counter > 0:
+                                param_data.f_value += param_data.f_smooth_step
+                                param_data.f_smooth_sample_counter -= 1
+                                if plugin.params[p].f_calculate != nil:
+                                    plugin.params[p].f_calculate(plugin, param_data.f_value, p)
+                        of smFilter:
+                            discard simple_lp( # mutates first input
+                                        param_data.f_value,
+                                        param_data.f_smooth_coef,
+                                        param_data.f_next_value)
+                            if plugin.params[p].f_calculate != nil:
+                                plugin.params[p].f_calculate(plugin, param_data.f_value, p)
+                        of smNone:
+                            discard
+            var is_left_constant  = (process.audio_inputs[0].constant_mask and 0b01) != 0
+            var is_right_constant = (process.audio_inputs[0].constant_mask and 0b10) != 0
+            if process.audio_inputs[0].data64 != nil:
+                plugin.cb_process_sample(
+                    plugin,
+                    process.audio_inputs[0]. data64[0][if is_left_constant:  0'u32 else: i],
+                    process.audio_inputs[0]. data64[1][if is_right_constant: 0'u32 else: i],
+                    process.audio_outputs[0].data64[0][i],
+                    process.audio_outputs[0].data64[1][i],
+                    process.audio_inputs[0].latency)
+            else:
+                var temp_out_left : float64 = 0
+                var temp_out_right: float64 = 0
+                plugin.cb_process_sample(
+                    plugin,
+                    float64(process.audio_inputs[0]. data32[0][if is_left_constant:  0'u32 else: i]),
+                    float64(process.audio_inputs[0]. data32[1][if is_right_constant: 0'u32 else: i]),
+                    temp_out_left,
+                    temp_out_right,
+                    process.audio_inputs[0].latency)
+                process.audio_outputs[0].data32[0][i] = float32(temp_out_left)
+                process.audio_outputs[0].data32[1][i] = float32(temp_out_right)
+            i += 1
     return cpsCONTINUE
 
 
@@ -1380,10 +1416,10 @@ proc nim_plug_get_extension*(clap_plugin: ptr ClapPlugin, id: cstring): pointer 
 
 
 # var nim_plug_desc   *: PluginDesc
-var nim_plug_desc   *: ClapPluginDescriptor
-var nim_plug_params *: seq[Parameter]
-var nim_plug_id_map *: Table[uint32, int]
-var cb_process_block *: proc (plugin: ptr Plugin, clap_process: ptr ClapProcess, rw_start, rw_end_excluded: int): void
+var nim_plug_desc     *: ClapPluginDescriptor
+var nim_plug_params   *: seq[Parameter]
+var nim_plug_id_map   *: Table[uint32, int]
+var cb_process_sample *: proc (plugin: ptr Plugin, in_left, in_right: float64, out_left, out_right: var float64, latency: uint32): void
 
 var nim_plug_user_data *: pointer = nil
 
@@ -1452,14 +1488,32 @@ proc nim_plug_activate*(clap_plugin: ptr ClapPlugin,
                         min_frames_count: uint32,
                         max_frames_count: uint32): bool {.cdecl.} =
     var plugin = cast[ptr Plugin](clap_plugin.plugin_data)
-    plugin.sample_rate = sample_rate
-    for i in 0 ..< len(plugin.params):
-        if plugin.params[i].kind == pkFloat:
-            var coef = simple_lp_coef(plugin.params[i].f_smooth_cutoff, sample_rate)
-            plugin.dsp_param_data[i].f_smooth_coef = coef
-            plugin.ui_param_data[i].f_smooth_coef = coef
-    if cb_activate != nil:
-        cb_activate(plugin, sample_rate, min_frames_count, max_frames_count)
+    withLock(plugin.controls_mutex):
+        plugin.sample_rate = sample_rate
+        plugin.smoothed_params = @[]
+        for i in 0 ..< len(plugin.params):
+            if plugin.params[i].kind == pkFloat:
+                case plugin.params[i].f_smooth_mode:
+                    of smFilter:
+                        if plugin.params[i].f_smooth_cutoff > 0:
+                            var coef = simple_lp_coef(plugin.params[i].f_smooth_cutoff, sample_rate)
+                            plugin.dsp_param_data[i].f_smooth_coef = coef
+                            plugin.ui_param_data[i].f_smooth_coef = coef
+                            plugin.smoothed_params.add(i)
+                        else:
+                            plugin.params[i].f_smooth_mode = smNone
+                    of smLerp:
+                        if plugin.params[i].f_smooth_ms > 0:
+                            var samples = uint64(floor(plugin.params[i].f_smooth_ms * sample_rate * 0.001))
+                            plugin.dsp_param_data[i].f_smooth_samples = samples
+                            plugin.ui_param_data[i].f_smooth_samples = samples
+                            plugin.smoothed_params.add(i)
+                        else:
+                            plugin.params[i].f_smooth_mode = smNone
+                    of smNone:
+                        discard
+        if cb_activate != nil:
+            cb_activate(plugin, sample_rate, min_frames_count, max_frames_count)
     return true
 
 proc nim_plug_deactivate*(clap_plugin: ptr ClapPlugin): void {.cdecl.} =
@@ -1507,7 +1561,7 @@ proc nim_plug_create*(host: ptr ClapHost): ptr ClapPlugin {.cdecl.} =
     plugin.cb_on_start_processing = cb_on_start_processing
     plugin.cb_on_stop_processing  = cb_on_stop_processing
     plugin.cb_on_reset            = cb_on_reset
-    plugin.cb_process_block       = cb_process_block
+    plugin.cb_process_sample      = cb_process_sample
     plugin.cb_pre_save            = cb_pre_save
     plugin.cb_data_to_bytes       = cb_data_to_bytes
     plugin.cb_data_byte_count     = cb_data_byte_count
