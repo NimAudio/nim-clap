@@ -19,18 +19,18 @@ most types are defined in clap ending with `_t`. this looks kinda ugly imo, and 
 - definitely others
 
 ### building
-
-#### mac
 to build, run the following command
 ```
-nim compile --out:"example2" --app:lib --threads:on ".../offbeat/example2.nim"
+nim compile --out:"example" --app:lib --threads:on ".../nim_clap/example.nim"
 ```
 or for debugging
 ```
-nim compile --verbosity:2 --hints:off --out:"example2" --app:lib --forceBuild --threads:on -
--lineDir:on --lineTrace:on --debuginfo:on ".../offbeat/example2.nim"
+nim compile --verbosity:2 --hints:off --out:"example" --app:lib --forceBuild --threads:on -
+-lineDir:on --lineTrace:on --debuginfo:on ".../nim_clap/example.nim"
 ```
-and copy the binary (and .dSYM if debugging) into the provided example2.clap bundle for macos. if you change the filename, you will need to change the bundle plist to have the updated name.
+
+#### mac
+then copy the binary (and .dSYM if debugging) into the provided example.clap bundle for macos. if you change the filename, you will need to change the bundle plist to have the updated name.
 
 #### other platforms
 i am not sure what is needed for windows or linux, but reaper at least doesn't care if it is bundled or not. i simply copied and modified the surge bundle.
