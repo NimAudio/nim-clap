@@ -1,13 +1,11 @@
 # nim-clap
-clap plugin api in nim. currently unfinished
+clap plugin api in nim. currently unfinished but includes all the basics
 
 **i have moved the plugin framework which abstracts over the raw api to [a new repo, offbeat](https://github.com/morganholly/offbeat).**
 
-put clap repo files in `clap-main` folder, not as a folder in that folder
-
 tested with version 1.2, hash df8f16c. later versions may not work, try this version if you have any issues
 
-requires futhark
+has futhark set up but commented out. to use, put clap repo files in `clap-main` folder, not as a folder in that folder
 
 i have skipped over the types for transport related stuff. eventually i'll add that but i'm primarily making this for me and what i'm working on, which does not need that.
 

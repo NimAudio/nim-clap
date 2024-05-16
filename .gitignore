@@ -1,7 +1,7 @@
 */.DS_Store
 .DS_Store
 clap-main/*
-!clap-main/clap_files_go_here.txt
+!clap-main/clap_files_for_futhark_go_here.txt
 Backups/*
 
 
