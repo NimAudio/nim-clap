@@ -13,9 +13,18 @@ has futhark set up but commented out. to use, put clap repo files in `clap-main`
 
 most types are defined in clap ending with `_t`. this looks kinda ugly imo, and isn't necessary in nim, but futhark looks for whether the `_t` version is defined, so all types that end with `_t` are aliased to remove that, and where types are used, the aliased version is used.
 
+### supported extensions:
+- audio ports
+- note ports
+- parameters
+- latency
+- logging
+- state
+
 ### known missing api sections (PRs welcome):
 - transport events
 - gui
+- thread checking (basically empty file)
 - definitely others
 
 ### building
@@ -25,7 +34,7 @@ nim compile --out:"example" --app:lib --threads:on ".../nim_clap/example.nim"
 ```
 or for debugging
 ```
-nim compile --verbosity:2 --hints:off --out:"example" --app:lib --forceBuild --threads:on -
+nim compile --verbosity:1 --hints:off --out:"example" --app:lib --forceBuild --threads:on -
 -lineDir:on --lineTrace:on --debuginfo:on ".../nim_clap/example.nim"
 ```
 
