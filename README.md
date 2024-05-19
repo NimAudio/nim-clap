@@ -20,10 +20,10 @@ most types are defined in clap ending with `_t`. this looks kinda ugly imo, and 
 - latency
 - logging
 - state
+- gui
 
 ### known missing api sections (PRs welcome):
 - transport events
-- gui
 - thread checking (basically empty file)
 - definitely others
 
