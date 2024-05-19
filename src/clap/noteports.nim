@@ -1,4 +1,4 @@
-import shared, process
+import shared, plugin
 
 const
     CLAP_EXT_NOTE_PORTS *: cstring = "clap.note-ports"

@@ -1,4 +1,4 @@
-import shared, process
+import plugin
 
 const
     CLAP_EXT_LATENCY *: cstring = "clap.latency"

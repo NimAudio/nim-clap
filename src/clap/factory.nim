@@ -1,4 +1,4 @@
-import shared, process
+import plugin
 
 const CLAP_PLUGIN_FACTORY_ID *: cstring = "clap.plugin-factory"
 

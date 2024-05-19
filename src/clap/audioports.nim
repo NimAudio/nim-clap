@@ -1,4 +1,4 @@
-import shared, process
+import shared, plugin
 
 const
     CLAP_EXT_AUDIO_PORTS *: cstring = "clap.audio-ports"

@@ -1,4 +1,4 @@
-import shared, process # process contains ClapPlugin, which should probably be moved to its own file
+import plugin
 
 const
     CLAP_EXT_GUI *: cstring = "clap.gui"

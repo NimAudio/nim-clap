@@ -1,4 +1,4 @@
-import shared, process, events
+import shared, plugin, events
 
 const CLAP_EXT_PARAMS *: cstring = "clap.params"
 
