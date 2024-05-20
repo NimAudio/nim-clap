@@ -1,0 +1,4 @@
+nimTitle	latency	clap/latency.html	module src/clap/latency		0
+nim	CLAP_EXT_LATENCY	clap/latency.html#CLAP_EXT_LATENCY	const CLAP_EXT_LATENCY		4
+nim	ClapPluginLatency	clap/latency.html#ClapPluginLatency	object ClapPluginLatency		9
+nim	ClapHostLatency	clap/latency.html#ClapHostLatency	object ClapHostLatency		16

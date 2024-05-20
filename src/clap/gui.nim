@@ -48,6 +48,55 @@ type
     # ClapPluginGUIT* = object
     ClapPluginGUI* = object
         ## Plugin-implemented ui-related interactions
+        ##
+        ## **is_api_supported** *main-thread*
+        ## Returns true if the requested gui api is supported
+        ##
+        ## **get_preferred_api** *main-thread*
+        ## Returns true if the plugin has a preferred api.
+        ## The host has no obligation to honor the plugin preference, this is just a hint.
+        ##
+        ## The ptr cstring variable should be explicitly assigned as a pointer
+        ## to one of the CLAP_WINDOW_API_XYZ constants defined above, not strcopied.
+        ##
+        ## **create** *main-thread*
+        ## Create and allocate all resources necessary for the gui.
+        ##
+        ## If is_floating is true, then the window will not be managed by the host. The plugin
+        ## can set its window to stays above the parent window, see set_transient().
+        ## api may be null or blank for floating window.
+        ##
+        ## If is_floating is false, then the plugin has to embed its window into the parent window, see
+        ## set_parent().
+        ##
+        ## After this call, the GUI may not be visible yet; don't forget to call show().
+        ##
+        ## Returns true if the GUI is successfully created.
+        ##
+        ## **destroy** *main-thread*
+        ## 
+        ## **set_scale** *main-thread*
+        ## 
+        ## **get_size** *main-thread*
+        ## 
+        ## **can_resize** *main-thread & !floating*
+        ## 
+        ## **get_resize_hints** *main-thread & !floating*
+        ## 
+        ## **adjust_size** *main-thread & !floating*
+        ## 
+        ## **set_size** *main-thread & !floating*
+        ## 
+        ## **set_parent** *main-thread & !floating*
+        ## 
+        ## **set_transient** *main-thread & floating*
+        ## 
+        ## **suggest_title** *main-thread & floating*
+        ## 
+        ## **show** *main-thread*
+        ## 
+        ## **hide** *main-thread*
+        ## 
         is_api_supported  *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
         get_preferred_api *: proc (plugin: ptr ClapPlugin, api: ptr cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
         create            *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
@@ -69,9 +118,10 @@ type
     ClapHostGUI* = object
         ## Host-implemented ui-related interactions
         ##
-        ## **resize_hints_changed** The host should call get_resize_hints() again.
+        ## **resize_hints_changed** *thread-safe & !floating*
+        ## The host should call get_resize_hints() again.
         ##
-        ## **request_resize**
+        ## **request_resize** *thread-safe & !floating*
         ## Request the host to resize the client area to width, height.
         ## Return true if the new size is accepted, false otherwise.
         ## The host doesn't have to call set_size().
@@ -79,20 +129,20 @@ type
         ## acknowledged the request and will process it asynchronously. If the request then can't be
         ## satisfied then the host will call set_size() to revert the operation.
         ##
-        ## **request_show**
+        ## **request_show** *thread-safe*
         ## Request the host to show the plugin gui.
         ## Return true on success, false otherwise.
         ##
-        ## **request_hide**
+        ## **request_hide** *thread-safe*
         ## Request the host to hide the plugin gui.
         ## Return true on success, false otherwise.
         ##
-        ## **closed**
+        ## **closed** *thread-safe*
         ## The floating window has been closed, or the connection to the gui has been lost.
-        ## If was_destroyed is true, then the host must call clap_plugin_gui->destroy() to
+        ## If was_destroyed is true, then the host must call clap_plugin_gui.destroy() to
         ## acknowledge the gui destruction.
-        resize_hints_changed *: proc (host: ptr ClapHost)                        : void {.cdecl.} ## [thread-safe & !floating]
-        request_resize       *: proc (host: ptr ClapHost, width, height: uint32) : bool {.cdecl.} ## [thread-safe & !floating]
-        request_show         *: proc (host: ptr ClapHost)                        : bool {.cdecl.} ## [thread-safe]
-        request_hide         *: proc (host: ptr ClapHost)                        : bool {.cdecl.} ## [thread-safe]
-        closed               *: proc (host: ptr ClapHost, was_destroyed: bool)   : void {.cdecl.} ## [thread-safe]
+        resize_hints_changed *: proc (host: ptr ClapHost)                        : void {.cdecl.}
+        request_resize       *: proc (host: ptr ClapHost, width, height: uint32) : bool {.cdecl.}
+        request_show         *: proc (host: ptr ClapHost)                        : bool {.cdecl.}
+        request_hide         *: proc (host: ptr ClapHost)                        : bool {.cdecl.}
+        closed               *: proc (host: ptr ClapHost, was_destroyed: bool)   : void {.cdecl.}

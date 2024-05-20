@@ -43,3 +43,11 @@ then copy the binary (and .dSYM if debugging) into the provided example.clap bun
 
 #### other platforms
 i am not sure what is needed for windows or linux, but reaper at least doesn't care if it is bundled or not. i simply copied and modified the surge bundle.
+
+### documentation
+to view existing generated documentation
+- run `python3 -m http.server 7029 --directory htmldocs`
+- visit http://localhost:7029/clap.html
+
+to generate documentation
+- run `nim doc --project --index:on --outdir:htmldocs src/clap.nim`

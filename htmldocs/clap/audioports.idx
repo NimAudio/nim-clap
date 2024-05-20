@@ -1,0 +1,13 @@
+nimTitle	audioports	clap/audioports.html	module src/clap/audioports		0
+nim	CLAP_EXT_AUDIO_PORTS	clap/audioports.html#CLAP_EXT_AUDIO_PORTS	const CLAP_EXT_AUDIO_PORTS		4
+nim	CLAP_PORT_MONO	clap/audioports.html#CLAP_PORT_MONO	const CLAP_PORT_MONO		5
+nim	CLAP_PORT_STEREO	clap/audioports.html#CLAP_PORT_STEREO	const CLAP_PORT_STEREO		6
+nim	ClapAudioPortFlag	clap/audioports.html#ClapAudioPortFlag	enum ClapAudioPortFlag		10
+nim	ClapAudioPortFlags	clap/audioports.html#ClapAudioPortFlags	type ClapAudioPortFlags		15
+nim	conv_clap_audio_port_flags	clap/audioports.html#conv_clap_audio_port_flags.c,set[ClapAudioPortFlag]	converter conv_clap_audio_port_flags(flags: set[ClapAudioPortFlag]): ClapAudioPortFlags		17
+nim	ClapAudioPortRescanFlag	clap/audioports.html#ClapAudioPortRescanFlag	enum ClapAudioPortRescanFlag		24
+nim	ClapAudioPortRescanFlags	clap/audioports.html#ClapAudioPortRescanFlags	type ClapAudioPortRescanFlags		31
+nim	conv_clap_audio_port_rescan_flags	clap/audioports.html#conv_clap_audio_port_rescan_flags.c,set[ClapAudioPortRescanFlag]	converter conv_clap_audio_port_rescan_flags(flags: set[ClapAudioPortRescanFlag]): ClapAudioPortRescanFlags		33
+nim	ClapAudioPortInfo	clap/audioports.html#ClapAudioPortInfo	object ClapAudioPortInfo		42
+nim	ClapPluginAudioPorts	clap/audioports.html#ClapPluginAudioPorts	object ClapPluginAudioPorts		52
+nim	ClapHostAudioPorts	clap/audioports.html#ClapHostAudioPorts	object ClapHostAudioPorts		61

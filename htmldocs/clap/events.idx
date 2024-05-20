@@ -1,0 +1,19 @@
+nimTitle	events	clap/events.html	module src/clap/events		0
+nim	ClapEventFlag	clap/events.html#ClapEventFlag	enum ClapEventFlag		4
+nim	ClapEventFlags	clap/events.html#ClapEventFlags	type ClapEventFlags		7
+nim	conv_clap_event_flags	clap/events.html#conv_clap_event_flags.c,set[ClapEventFlag]	converter conv_clap_event_flags(flags: set[ClapEventFlag]): ClapEventFlags		9
+nim	ClapEventHeader	clap/events.html#ClapEventHeader	object ClapEventHeader		18
+nim	ClapEventType	clap/events.html#ClapEventType	enum ClapEventType		25
+nim	ClapEventNote	clap/events.html#ClapEventNote	object ClapEventNote		43
+nim	ClapNoteExpressionType	clap/events.html#ClapNoteExpressionType	enum ClapNoteExpressionType		51
+nim	ClapNoteExpression	clap/events.html#ClapNoteExpression	type ClapNoteExpression		65
+nim	ClapEventNoteExpression	clap/events.html#ClapEventNoteExpression	object ClapEventNoteExpression		70
+nim	ClapEventParamMod	clap/events.html#ClapEventParamMod	type ClapEventParamMod		83
+nim	ClapEventParamValue	clap/events.html#ClapEventParamValue	object ClapEventParamValue		84
+nim	ClapEventParamGesture	clap/events.html#ClapEventParamGesture	object ClapEventParamGesture		96
+nim	ClapEventMidi	clap/events.html#ClapEventMidi	object ClapEventMidi		115
+nim	ClapEventMidiSysex	clap/events.html#ClapEventMidiSysex	object ClapEventMidiSysex		122
+nim	ClapEventMidi2	clap/events.html#ClapEventMidi2	object ClapEventMidi2		130
+nim	ClapEventUnion	clap/events.html#ClapEventUnion	object ClapEventUnion		135
+nim	ClapInputEvents	clap/events.html#ClapInputEvents	object ClapInputEvents		148
+nim	ClapOutputEvents	clap/events.html#ClapOutputEvents	object ClapOutputEvents		155

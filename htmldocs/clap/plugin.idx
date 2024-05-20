@@ -1,0 +1,4 @@
+nimTitle	plugin	clap/plugin.html	module src/clap/plugin		0
+nim	ClapPluginDescriptor	clap/plugin.html#ClapPluginDescriptor	object ClapPluginDescriptor		7
+nim	ClapPlugin	clap/plugin.html#ClapPlugin	object ClapPlugin		22
+nim	ClapHost	clap/plugin.html#ClapHost	object ClapHost		78

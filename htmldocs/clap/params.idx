@@ -1,0 +1,14 @@
+nimTitle	params	clap/params.html	module src/clap/params		0
+nim	CLAP_EXT_PARAMS	clap/params.html#CLAP_EXT_PARAMS	const CLAP_EXT_PARAMS		3
+nim	ClapParamInfoFlag	clap/params.html#ClapParamInfoFlag	enum ClapParamInfoFlag		6
+nim	ClapParamInfoFlags	clap/params.html#ClapParamInfoFlags	type ClapParamInfoFlags		44
+nim	conv_clap_param_info_flags	clap/params.html#conv_clap_param_info_flags.c,set[ClapParamInfoFlag]	converter conv_clap_param_info_flags(flags: set[ClapParamInfoFlag]): ClapParamInfoFlags		46
+nim	ClapParamRescanFlag	clap/params.html#ClapParamRescanFlag	enum ClapParamRescanFlag		53
+nim	ClapParamRescanFlags	clap/params.html#ClapParamRescanFlags	type ClapParamRescanFlags		91
+nim	conv_clap_param_rescan_flags	clap/params.html#conv_clap_param_rescan_flags.c,set[ClapParamRescanFlag]	converter conv_clap_param_rescan_flags(flags: set[ClapParamRescanFlag]): ClapParamRescanFlags		93
+nim	ClapParamClearFlag	clap/params.html#ClapParamClearFlag	enum ClapParamClearFlag		100
+nim	ClapParamClearFlags	clap/params.html#ClapParamClearFlags	type ClapParamClearFlags		104
+nim	conv_clap_param_clear_flags	clap/params.html#conv_clap_param_clear_flags.c,set[ClapParamClearFlag]	converter conv_clap_param_clear_flags(flags: set[ClapParamClearFlag]): ClapParamClearFlags		106
+nim	ClapParamInfo	clap/params.html#ClapParamInfo	object ClapParamInfo		115
+nim	ClapPluginParams	clap/params.html#ClapPluginParams	object ClapPluginParams		161
+nim	ClapHostParams	clap/params.html#ClapHostParams	object ClapHostParams		209

@@ -1,0 +1,6 @@
+nimTitle	state	clap/state.html	module src/clap/state		0
+nim	CLAP_EXT_STATE	clap/state.html#CLAP_EXT_STATE	const CLAP_EXT_STATE		4
+nim	ClapIStream	clap/state.html#ClapIStream	object ClapIStream		9
+nim	ClapOStream	clap/state.html#ClapOStream	object ClapOStream		15
+nim	ClapPluginState	clap/state.html#ClapPluginState	object ClapPluginState		21
+nim	ClapHostState	clap/state.html#ClapHostState	object ClapHostState		27

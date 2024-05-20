@@ -1,0 +1,14 @@
+nimTitle	gui	clap/gui.html	module src/clap/gui		0
+nim	CLAP_EXT_GUI	clap/gui.html#CLAP_EXT_GUI	const CLAP_EXT_GUI		4
+nim	CLAP_WINDOW_API_WIN32	clap/gui.html#CLAP_WINDOW_API_WIN32	const CLAP_WINDOW_API_WIN32		8
+nim	CLAP_WINDOW_API_COCOA	clap/gui.html#CLAP_WINDOW_API_COCOA	const CLAP_WINDOW_API_COCOA		11
+nim	CLAP_WINDOW_API_X11	clap/gui.html#CLAP_WINDOW_API_X11	const CLAP_WINDOW_API_X11		15
+nim	CLAP_WINDOW_API_WAYLAND	clap/gui.html#CLAP_WINDOW_API_WAYLAND	const CLAP_WINDOW_API_WAYLAND		19
+nim	ClapHWND	clap/gui.html#ClapHWND	type ClapHWND		22
+nim	ClapNSView	clap/gui.html#ClapNSView	type ClapNSView		23
+nim	ClapXWND	clap/gui.html#ClapXWND	type ClapXWND		24
+nim	ClapWindowHandle	clap/gui.html#ClapWindowHandle	object ClapWindowHandle		26
+nim	ClapWindow	clap/gui.html#ClapWindow	object ClapWindow		34
+nim	ClapGUIResizeHints	clap/gui.html#ClapGUIResizeHints	object ClapGUIResizeHints		40
+nim	ClapPluginGUI	clap/gui.html#ClapPluginGUI	object ClapPluginGUI		49
+nim	ClapHostGUI	clap/gui.html#ClapHostGUI	object ClapHostGUI		118

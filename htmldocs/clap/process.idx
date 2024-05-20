@@ -1,0 +1,4 @@
+nimTitle	process	clap/process.html	module src/clap/process		0
+nim	ClapAudioBuffer	clap/process.html#ClapAudioBuffer	object ClapAudioBuffer		7
+nim	ClapProcessStatus	clap/process.html#ClapProcessStatus	enum ClapProcessStatus		14
+nim	ClapProcess	clap/process.html#ClapProcess	object ClapProcess		23

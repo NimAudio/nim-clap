@@ -1,0 +1,11 @@
+nimTitle	noteports	clap/noteports.html	module src/clap/noteports		0
+nim	CLAP_EXT_NOTE_PORTS	clap/noteports.html#CLAP_EXT_NOTE_PORTS	const CLAP_EXT_NOTE_PORTS		4
+nim	ClapNoteDialectFlag	clap/noteports.html#ClapNoteDialectFlag	enum ClapNoteDialectFlag		7
+nim	ClapNoteDialectFlags	clap/noteports.html#ClapNoteDialectFlags	type ClapNoteDialectFlags		12
+nim	conv_clap_note_dialect_flags	clap/noteports.html#conv_clap_note_dialect_flags.c,set[ClapNoteDialectFlag]	converter conv_clap_note_dialect_flags(flags: set[ClapNoteDialectFlag]): ClapNoteDialectFlags		14
+nim	ClapNotePortRescanFlag	clap/noteports.html#ClapNotePortRescanFlag	enum ClapNotePortRescanFlag		21
+nim	ClapNotePortRescanFlags	clap/noteports.html#ClapNotePortRescanFlags	type ClapNotePortRescanFlags		24
+nim	conv_clap_note_port_rescan_flags	clap/noteports.html#conv_clap_note_port_rescan_flags.c,set[ClapNotePortRescanFlag]	converter conv_clap_note_port_rescan_flags(flags: set[ClapNotePortRescanFlag]): ClapNotePortRescanFlags		26
+nim	ClapNotePortInfo	clap/noteports.html#ClapNotePortInfo	object ClapNotePortInfo		35
+nim	ClapPluginNotePorts	clap/noteports.html#ClapPluginNotePorts	object ClapPluginNotePorts		43
+nim	ClapHostNotePorts	clap/noteports.html#ClapHostNotePorts	object ClapHostNotePorts		52

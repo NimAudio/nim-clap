@@ -1,0 +1,2 @@
+nimTitle	threadcheck	clap/threadcheck.html	module src/clap/threadcheck		0
+nim	CLAP_EXT_THREAD_CHECK	clap/threadcheck.html#CLAP_EXT_THREAD_CHECK	const CLAP_EXT_THREAD_CHECK		4

@@ -1,0 +1,5 @@
+nimTitle	log	clap/log.html	module src/clap/log		0
+nim	CLAP_EXT_LOG	clap/log.html#CLAP_EXT_LOG	const CLAP_EXT_LOG		4
+nim	ClapLogSeverity	clap/log.html#ClapLogSeverity	enum ClapLogSeverity		7
+nim	ClapHostLog	clap/log.html#ClapHostLog	object ClapHostLog		18
+nim	ClapHostThreadCheck	clap/log.html#ClapHostThreadCheck	object ClapHostThreadCheck		24

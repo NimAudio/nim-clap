@@ -1,0 +1,3 @@
+nimTitle	factory	clap/factory.html	module src/clap/factory		0
+nim	CLAP_PLUGIN_FACTORY_ID	clap/factory.html#CLAP_PLUGIN_FACTORY_ID	const CLAP_PLUGIN_FACTORY_ID		3
+nim	ClapPluginFactory	clap/factory.html#ClapPluginFactory	object ClapPluginFactory		8
