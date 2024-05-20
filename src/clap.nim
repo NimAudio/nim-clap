@@ -1,4 +1,18 @@
-import clap/[shared, latency, state, log, threadcheck, audioports, noteports, process, events, factory, entry, params]
+import clap/[
+            audioports,
+            entry,
+            events,
+            factory,
+            gui,
+            latency,
+            log,
+            noteports,
+            params,
+            process,
+            shared,
+            state,
+            threadcheck
+        ]
 
 # import futhark
 
@@ -8,5 +22,18 @@ import clap/[shared, latency, state, log, threadcheck, audioports, noteports, pr
 #     path "clap-main/include/clap"
 #     "clap.h"
 
-export shared, latency, state, log, threadcheck, audioports, noteports, process, events, factory, entry, params
+export
+    audioports,
+    entry,
+    events,
+    factory,
+    gui,
+    latency,
+    log,
+    noteports,
+    params,
+    process,
+    shared,
+    state,
+    threadcheck
 
