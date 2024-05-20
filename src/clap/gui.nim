@@ -97,21 +97,21 @@ type
         ## 
         ## **hide** *main-thread*
         ## 
-        is_api_supported  *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
-        get_preferred_api *: proc (plugin: ptr ClapPlugin, api: ptr cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
-        create            *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
-        destroy           *: proc (plugin: ptr ClapPlugin)                                      : void {.cdecl.} # [main-thread]
-        set_scale         *: proc (plugin: ptr ClapPlugin, scale: float64)                      : bool {.cdecl.} # [main-thread]
-        get_size          *: proc (plugin: ptr ClapPlugin, width, height: ptr uint32)           : bool {.cdecl.} # [main-thread]
-        can_resize        *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.} # [main-thread & !floating]
-        get_resize_hints  *: proc (plugin: ptr ClapPlugin, hints: ptr ClapGUIResizeHints)       : bool {.cdecl.} # [main-thread & !floating]
-        adjust_size       *: proc (plugin: ptr ClapPlugin, width, height: ptr uint32)           : bool {.cdecl.} # [main-thread & !floating]
-        set_size          *: proc (plugin: ptr ClapPlugin, width, height:     uint32)           : bool {.cdecl.} # [main-thread & !floating]
-        set_parent        *: proc (plugin: ptr ClapPlugin, window: ptr ClapWindow)              : bool {.cdecl.} # [main-thread & !floating]
-        set_transient     *: proc (plugin: ptr ClapPlugin, window: ptr ClapWindow)              : bool {.cdecl.} # [main-thread & floating]
-        suggest_title     *: proc (plugin: ptr ClapPlugin, title: cstring)                      : void {.cdecl.} # [main-thread & floating]
-        show              *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.} # [main-thread]
-        hide              *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.} # [main-thread]
+        is_api_supported  *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.}
+        get_preferred_api *: proc (plugin: ptr ClapPlugin, api: ptr cstring, is_floating: bool) : bool {.cdecl.}
+        create            *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.}
+        destroy           *: proc (plugin: ptr ClapPlugin)                                      : void {.cdecl.}
+        set_scale         *: proc (plugin: ptr ClapPlugin, scale: float64)                      : bool {.cdecl.}
+        get_size          *: proc (plugin: ptr ClapPlugin, width, height: ptr uint32)           : bool {.cdecl.}
+        can_resize        *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.}
+        get_resize_hints  *: proc (plugin: ptr ClapPlugin, hints: ptr ClapGUIResizeHints)       : bool {.cdecl.}
+        adjust_size       *: proc (plugin: ptr ClapPlugin, width, height: ptr uint32)           : bool {.cdecl.}
+        set_size          *: proc (plugin: ptr ClapPlugin, width, height:     uint32)           : bool {.cdecl.}
+        set_parent        *: proc (plugin: ptr ClapPlugin, window: ptr ClapWindow)              : bool {.cdecl.}
+        set_transient     *: proc (plugin: ptr ClapPlugin, window: ptr ClapWindow)              : bool {.cdecl.}
+        suggest_title     *: proc (plugin: ptr ClapPlugin, title: cstring)                      : void {.cdecl.}
+        show              *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.}
+        hide              *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.}
 
     # ClapHostGUI* = ClapHostGUIT
     # ClapHostGUIT* = object
