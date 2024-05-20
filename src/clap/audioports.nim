@@ -37,8 +37,9 @@ converter conv_clap_audio_port_rescan_flags*(flags: set[ClapAudioPortRescanFlag]
     return ClapAudioPortRescanFlags(res)
 
 type
-    ClapAudioPortInfo* = ClapAudioPortInfoT
-    ClapAudioPortInfoT* = object
+    # ClapAudioPortInfo* = ClapAudioPortInfoT
+    # ClapAudioPortInfoT* = object
+    ClapAudioPortInfo* = object
         id            *: ClapID
         name          *: array[CLAP_NAME_SIZE, char]
         flags         *: ClapAudioPortFlags
@@ -46,15 +47,17 @@ type
         port_type     *: cstring # CLAP_PORT_MONO | CLAP_PORT_STEREO
         in_place_pair *: ClapID # if in place supported, set to pair port id, else set to CLAP_INVALID_ID
 
-    ClapPluginAudioPorts* = ClapPluginAudioPortsT
-    ClapPluginAudioPortsT* = object
+    # ClapPluginAudioPorts* = ClapPluginAudioPortsT
+    # ClapPluginAudioPortsT* = object
+    ClapPluginAudioPorts* = object
         count *: proc (plugin: ptr ClapPlugin, is_input: bool): uint32 {.cdecl.}
         get   *: proc (plugin: ptr ClapPlugin,
                         index: uint32,
                         is_input: bool,
                         info: ptr ClapAudioPortInfo): bool {.cdecl.}
 
-    ClapHostAudioPorts* = ClapHostAudioPortsT
-    ClapHostAudioPortsT* = object
+    # ClapHostAudioPorts* = ClapHostAudioPortsT
+    # ClapHostAudioPortsT* = object
+    ClapHostAudioPorts* = object
         is_rescan_flag_supported *: proc (host: ptr ClapHost, flags: ClapAudioPortRescanFlags): bool {.cdecl.}
         rescan                   *: proc (host: ptr ClapHost, flags: ClapAudioPortRescanFlags): void {.cdecl.}

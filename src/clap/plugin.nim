@@ -2,8 +2,9 @@ import shared, process
 
 
 type
-    ClapPluginDescriptor* = ClapPluginDescriptorT
-    ClapPluginDescriptorT* = object
+    # ClapPluginDescriptor* = ClapPluginDescriptorT
+    # ClapPluginDescriptorT* = object
+    ClapPluginDescriptor* = object
         clap_version *: ClapVersion
         id           *: cstring
         name         *: cstring
@@ -16,8 +17,9 @@ type
         # features   *: ptr UncheckedArray[cstring]
         features     *: cstringArray
 
-    ClapPlugin* = ClapPluginT
-    ClapPluginT* = object
+    # ClapPlugin* = ClapPluginT
+    # ClapPluginT* = object
+    ClapPlugin* = object
         desc             *: ptr ClapPluginDescriptor
         plugin_data      *: pointer
 
@@ -71,8 +73,9 @@ type
         # [main-thread]
         on_main_thread   *: proc (plugin: ptr ClapPlugin): void {.cdecl.}
 
-    ClapHost* = ClapHostT
-    ClapHostT* = object
+    # ClapHost* = ClapHostT
+    # ClapHostT* = object
+    ClapHost* = object
         clap_version     *: ClapVersion
         host_data        *: pointer
         name             *: cstring

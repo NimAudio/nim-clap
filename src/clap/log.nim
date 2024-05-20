@@ -13,12 +13,14 @@ type
         clsHOST_MISBEHAVING   = 5,
         clsPLUGIN_MISBEHAVING = 6
 
-    ClapHostLog* = ClapHostLogT
-    ClapHostLogT* = object
+    # ClapHostLog* = ClapHostLogT
+    # ClapHostLogT* = object
+    ClapHostLog* = object
         # Log a message through the host.
         log*: proc (host: ptr ClapHost, severity: ClapLogSeverity, msg: cstring): void {.cdecl.}
 
-    ClapHostThreadCheck* = ClapHostThreadCheckT
-    ClapHostThreadCheckT* = object
+    # ClapHostThreadCheck* = ClapHostThreadCheckT
+    # ClapHostThreadCheckT* = object
+    ClapHostThreadCheck* = object
         is_main_thread  *: proc (host: ptr ClapHost): bool {.cdecl.}
         is_audio_thread *: proc (host: ptr ClapHost): bool {.cdecl.}

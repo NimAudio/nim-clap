@@ -5,8 +5,9 @@ const
 type
     ClapID* = distinct uint32
 
-    ClapVersion* = ClapVersionT
-    ClapVersionT* = object
+    # ClapVersion* = ClapVersionT
+    # ClapVersionT* = object
+    ClapVersion* = object
         major    *: uint32
         minor    *: uint32
         revision *: uint32

@@ -29,21 +29,24 @@ type
         win32 *: ClapHWND
         other *: pointer
 
-    ClapWindow* = ClapWindowT
-    ClapWindowT* = object
+    # ClapWindow* = ClapWindowT
+    # ClapWindowT* = object
+    ClapWindow* = object
         api    *: cstring
         handle *: ClapWindowHandle
 
-    ClapGUIResizeHints* = ClapGUIResizeHintsT
-    ClapGUIResizeHintsT* = object
+    # ClapGUIResizeHints* = ClapGUIResizeHintsT
+    # ClapGUIResizeHintsT* = object
+    ClapGUIResizeHints* = object
         can_resize_horizontally *: bool
         can_resize_vertically   *: bool
         preserve_aspect_ratio   *: bool
         aspect_ratio_width      *: uint32
         aspect_ratio_height     *: uint32
 
-    ClapPluginGUI* = ClapPluginGUIT
-    ClapPluginGUIT* = object
+    # ClapPluginGUI* = ClapPluginGUIT
+    # ClapPluginGUIT* = object
+    ClapPluginGUI* = object
         is_api_supported  *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
         get_preferred_api *: proc (plugin: ptr ClapPlugin, api: ptr cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
         create            *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.} # [main-thread]
@@ -60,10 +63,20 @@ type
         show              *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.} # [main-thread]
         hide              *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.} # [main-thread]
 
-    ClapHostGUI* = ClapHostGUIT
-    ClapHostGUIT* = object
-        resize_hints_changed *: proc (host: ptr ClapHost)                        : void {.cdecl.} # [thread-safe & !floating]
-        request_resize       *: proc (host: ptr ClapHost, width, height: uint32) : bool {.cdecl.} # [thread-safe & !floating]
-        request_show         *: proc (host: ptr ClapHost)                        : bool {.cdecl.} # [thread-safe]
-        request_hide         *: proc (host: ptr ClapHost)                        : bool {.cdecl.} # [thread-safe]
-        closed               *: proc (host: ptr ClapHost, was_destroyed: bool)   : void {.cdecl.} # [thread-safe]
+    # ClapHostGUI* = ClapHostGUIT
+    # ClapHostGUIT* = object
+    ClapHostGUI* = object
+        resize_hints_changed *: proc (host: ptr ClapHost)                        : void {.cdecl.}
+        ## [thread-safe & !floating]
+
+        request_resize       *: proc (host: ptr ClapHost, width, height: uint32) : bool {.cdecl.}
+        ## [thread-safe & !floating]
+
+        request_show         *: proc (host: ptr ClapHost)                        : bool {.cdecl.}
+        ## [thread-safe]
+
+        request_hide         *: proc (host: ptr ClapHost)                        : bool {.cdecl.}
+        ## [thread-safe]
+
+        closed               *: proc (host: ptr ClapHost, was_destroyed: bool)   : void {.cdecl.}
+        ## [thread-safe]

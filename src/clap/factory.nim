@@ -3,8 +3,9 @@ import plugin
 const CLAP_PLUGIN_FACTORY_ID *: cstring = "clap.plugin-factory"
 
 type
-    ClapPluginFactory* = ClapPluginFactoryT
-    ClapPluginFactoryT* = object
+    # ClapPluginFactory* = ClapPluginFactoryT
+    # ClapPluginFactoryT* = object
+    ClapPluginFactory* = object
         get_plugin_count      *: proc (factory: ptr ClapPluginFactory): uint32 {.cdecl.}
         get_plugin_descriptor *: proc (factory: ptr ClapPluginFactory,
                                         index:  uint32): ptr ClapPluginDescriptor {.cdecl.}

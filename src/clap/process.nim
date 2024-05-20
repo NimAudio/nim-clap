@@ -2,8 +2,9 @@ import events
 
 
 type
-    ClapAudioBuffer* = ClapAudioBufferT
-    ClapAudioBufferT* = object
+    # ClapAudioBuffer* = ClapAudioBufferT
+    # ClapAudioBufferT* = object
+    ClapAudioBuffer* = object
         data32        *: ptr UncheckedArray[ptr UncheckedArray[float32]]
         data64        *: ptr UncheckedArray[ptr UncheckedArray[float64]]
         channel_count *: uint32
@@ -17,8 +18,9 @@ type
         cpsTAIL                  = 3,
         cpsSLEEP                 = 4
 
-    ClapProcess* = ClapProcessT
-    ClapProcessT* = object
+    # ClapProcess* = ClapProcessT
+    # ClapProcessT* = object
+    ClapProcess* = object
         steady_time         *: int64
         frames_count        *: uint32
         # transport         *: ptr UncheckedArray[ClapEventTransport]
