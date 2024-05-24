@@ -34,8 +34,8 @@ nim compile --out:"example" --app:lib --threads:on ".../nim_clap/example.nim"
 ```
 or for debugging
 ```
-nim compile --verbosity:1 --hints:off --out:"example" --app:lib --forceBuild --threads:on
---lineDir:on --lineTrace:on --debuginfo:on ".../nim_clap/example.nim"
+nim compile --verbosity:1 --hints:off --out:"example" --app:lib --forceBuild
+--threads:on --lineDir:on --lineTrace:on --debuginfo:on ".../nim_clap/example.nim"
 ```
 
 #### mac
