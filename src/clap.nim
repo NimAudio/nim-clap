@@ -9,6 +9,7 @@ import clap/[
             noteports,
             params,
             process,
+            plugin,
             shared,
             state,
             threadcheck
@@ -33,6 +34,7 @@ export
     noteports,
     params,
     process,
+    plugin,
     shared,
     state,
     threadcheck
