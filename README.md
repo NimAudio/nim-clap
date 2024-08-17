@@ -3,7 +3,7 @@ clap plugin api in nim. currently unfinished but includes all the basics
 
 install with `nimble install clap`
 
-**i have moved the plugin framework which abstracts over the raw api to [a new repo, offbeat](https://github.com/morganholly/offbeat).**
+**i have moved the plugin framework which abstracts over the raw api to [a new repo, offbeat](https://github.com/NimAudio/offbeat).**
 
 ---
 
