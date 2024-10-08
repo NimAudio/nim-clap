@@ -66,37 +66,70 @@ type
         ## can set its window to stays above the parent window, see set_transient().
         ## api may be null or blank for floating window.
         ##
-        ## If is_floating is false, then the plugin has to embed its window into the parent window, see
-        ## set_parent().
+        ## If is_floating is false, then the plugin has to embed its window into the parent window, see set_parent().
         ##
         ## After this call, the GUI may not be visible yet; don't forget to call show().
         ##
         ## Returns true if the GUI is successfully created.
         ##
         ## **destroy** *main-thread*
-        ## 
+        ## Free all resources associated with the gui.
+        ##
         ## **set_scale** *main-thread*
-        ## 
+        ## Set the absolute GUI scaling factor, and override any OS info.
+        ## Should not be used if the windowing api relies upon logical pixels.
+        ##
+        ## If the plugin prefers to work out the scaling factor itself
+        ## by querying the OS directly, then ignore the call.
+        ##
+        ## scale = 2 means 200% scaling.
+        ##
+        ## Returns true if the scaling could be applied
+        ## Returns false if the call was ignored, or the scaling could not be applied.
+        ##
         ## **get_size** *main-thread*
-        ## 
+        ## Get the current size of the plugin UI.
+        ## clap_plugin_gui->create() must have been called prior to asking the size.
+        ##
+        ## Returns true if the plugin could get the size.
+        ##
         ## **can_resize** *main-thread & !floating*
-        ## 
+        ## Returns true if the window is resizeable (mouse drag).
+        ##
         ## **get_resize_hints** *main-thread & !floating*
-        ## 
+        ## Returns true if the plugin can provide hints on how to resize the window.
+        ##
         ## **adjust_size** *main-thread & !floating*
-        ## 
+        ## If the plugin gui is resizable, then the plugin will calculate the closest
+        ## usable size which fits in the given size.
+        ## This method does not change the size.
+        ##
+        ## Returns true if the plugin could adjust the given size.
+        ##
         ## **set_size** *main-thread & !floating*
-        ## 
+        ## Sets the window size.
+        ## Returns true if the plugin could resize its window to the given size.
+        ##
         ## **set_parent** *main-thread & !floating*
-        ## 
+        ## Embeds the plugin window into the given window.
+        ## Returns true on success.
+        ##
         ## **set_transient** *main-thread & floating*
-        ## 
+        ## Set the plugin floating window to stay above the given window.
+        ## Returns true on success.
+        ##
         ## **suggest_title** *main-thread & floating*
-        ## 
+        ## Suggests a window title. Only for floating windows.
+        ##
         ## **show** *main-thread*
-        ## 
+        ## Show the window.
+        ## Returns true on success.
+        ##
         ## **hide** *main-thread*
-        ## 
+        ## Hide the window, this method does not free the resources, it just hides
+        ## the window content. Yet it may be a good idea to stop painting timers.
+        ## Returns true on success.
+        ##
         is_api_supported  *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.}
         get_preferred_api *: proc (plugin: ptr ClapPlugin, api: ptr cstring, is_floating: bool) : bool {.cdecl.}
         create            *: proc (plugin: ptr ClapPlugin, api:     cstring, is_floating: bool) : bool {.cdecl.}
