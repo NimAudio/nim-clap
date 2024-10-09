@@ -29,14 +29,10 @@ type
         win32 *: ClapHWND
         other *: pointer
 
-    # ClapWindow* = ClapWindowT
-    # ClapWindowT* = object
     ClapWindow* = object
         api    *: cstring
         handle *: ClapWindowHandle
 
-    # ClapGUIResizeHints* = ClapGUIResizeHintsT
-    # ClapGUIResizeHintsT* = object
     ClapGUIResizeHints* = object
         can_resize_horizontally *: bool
         can_resize_vertically   *: bool
@@ -44,8 +40,6 @@ type
         aspect_ratio_width      *: uint32
         aspect_ratio_height     *: uint32
 
-    # ClapPluginGUI* = ClapPluginGUIT
-    # ClapPluginGUIT* = object
     ClapPluginGUI* = object
         ## Plugin-implemented ui-related interactions
         ##
@@ -146,8 +140,6 @@ type
         show              *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.}
         hide              *: proc (plugin: ptr ClapPlugin)                                      : bool {.cdecl.}
 
-    # ClapHostGUI* = ClapHostGUIT
-    # ClapHostGUIT* = object
     ClapHostGUI* = object
         ## Host-implemented ui-related interactions
         ##

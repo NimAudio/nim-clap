@@ -13,8 +13,6 @@ converter conv_clap_event_flags*(flags: set[ClapEventFlag]): ClapEventFlags =
     return ClapEventFlags(res)
 
 type
-    # ClapEventHeader* = ClapEventHeaderT
-    # ClapEventHeaderT* = object
     ClapEventHeader* = object
         size       *: uint32         # event size including this header, eg: sizeof (clap_event_note)
         time       *: uint32         # sample offset within the buffer for this event
@@ -38,8 +36,6 @@ type
         cetMIDI2               = 12  # raw midi 2 event; clap_event_midi2
 
     # wildcard, -1, means apply to all notes matching the other parts
-    # ClapEventNote* = ClapEventNoteT
-    # ClapEventNoteT* = object
     ClapEventNote* = object
         header     *: ClapEventHeader
         note_id    *: int32   # host provided note id >= 0, or -1 if unspecified or wildcard
@@ -65,8 +61,6 @@ type
     ClapNoteExpression* = distinct int32
 
     # wildcard, -1, means apply to all notes matching the other parts
-    # ClapEventNoteExpression* = ClapEventNoteExpressionT
-    # ClapEventNoteExpressionT* = object
     ClapEventNoteExpression* = object
         header     *: ClapEventHeader
         note_id    *: int32   # host provided note id >= 0, or -1 if unspecified or wildcard
@@ -76,10 +70,6 @@ type
         value      *: float64 # 0..1
 
     # wildcard, -1, means apply to all notes matching the other parts
-    # ClapEventParamMod* = ClapEventParamModT
-    # ClapEventParamModT* = ClapEventParamValueT
-    # ClapEventParamValue* = ClapEventParamValueT
-    # ClapEventParamValueT* = object
     ClapEventParamMod* = ClapEventParamValue # combines identical _value and _mod types,
     ClapEventParamValue* = object            # which only differ in the name of one variable
         header     *: ClapEventHeader
@@ -91,8 +81,6 @@ type
         key        *: int16   # 0..127, same as MIDI1 Key Number (60==Middle C), -1 for wildcard
         val_amt    *: float64 # 0..1
 
-    # ClapEventParamGesture* = ClapEventParamGestureT
-    # ClapEventParamGestureT* = object
     ClapEventParamGesture* = object
         header   *: ClapEventHeader
         param_id *: ClapID
@@ -110,23 +98,17 @@ type
     # oops i forgot i wasn't implementing transport yet
     # needs to be modified to be like the other flags
 
-    # ClapEventMidi* = ClapEventMidiT
-    # ClapEventMidiT* = object
     ClapEventMidi* = object
         header     *: ClapEventHeader
         port_index *: uint16
         data       *: array[3, uint8]
 
-    # ClapEventMidiSysex* = ClapEventMidiSysexT
-    # ClapEventMidiSysexT* = object
     ClapEventMidiSysex* = object
         header     *: ClapEventHeader
         port_index *: uint16
         buffer     *: ptr UncheckedArray[uint8]
         size       *: uint32
 
-    # ClapEventMidi2* = ClapEventMidi2T
-    # ClapEventMidi2T* = object
     ClapEventMidi2* = object
         header     *: ClapEventHeader
         port_index *: uint16
@@ -143,15 +125,11 @@ type
         kindMidiSysex    *: ClapEventMidiSysex
         kindMidi2        *: ClapEventMidi2
 
-    # ClapInputEvents* = ClapInputEventsT
-    # ClapInputEventsT* = object
     ClapInputEvents* = object
         ctx *: pointer
         size *: proc (list: ptr ClapInputEvents): uint32 {.cdecl.}
         get *: proc (list: ptr ClapInputEvents, index: uint32): ptr ClapEventUnion {.cdecl.}
 
-    # ClapOutputEvents* = ClapOutputEventsT
-    # ClapOutputEventsT* = object
     ClapOutputEvents* = object
         ctx *: pointer
         try_push *: proc (list: ptr ClapOutputEvents, event: ptr ClapEventUnion): bool {.cdecl.}

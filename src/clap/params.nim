@@ -110,8 +110,6 @@ converter conv_clap_param_clear_flags*(flags: set[ClapParamClearFlag]): ClapPara
     return ClapParamClearFlags(res)
 
 type
-    # ClapParamInfo* = ClapParamInfoT
-    # ClapParamInfoT* = object
     ClapParamInfo* = object
         id            *: ClapID # Stable parameter identifier, it must never change.
         flags         *: ClapParamInfoFlags
@@ -156,8 +154,6 @@ type
         max_value     *: float64 # Maximum plain value
         default_value *: float64 # Default plain value
 
-    # ClapPluginParams* = ClapPluginParamsT
-    # ClapPluginParamsT* = object
     ClapPluginParams* = object
             # Returns the number of parameters. [main-thread]
         count         *: proc (plugin: ptr ClapPlugin): uint32 {.cdecl.}

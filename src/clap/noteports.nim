@@ -30,16 +30,12 @@ converter conv_clap_note_port_rescan_flags*(flags: set[ClapNotePortRescanFlag]):
     return ClapNotePortRescanFlags(res)
 
 type
-    # ClapNotePortInfo* = ClapNotePortInfoT
-    # ClapNotePortInfoT* = object
     ClapNotePortInfo* = object
         id                 *: ClapID
         supported_dialects *: ClapNoteDialectFlags
         preferred_dialect  *: ClapNoteDialectFlags
         name               *: array[CLAP_NAME_SIZE, char]
 
-    # ClapPluginNotePorts* = ClapPluginNotePortsT
-    # ClapPluginNotePortsT* = object
     ClapPluginNotePorts* = object
         count *: proc (plugin: ptr ClapPlugin, is_input: bool): uint32 {.cdecl.}
         get   *: proc (plugin: ptr ClapPlugin,
@@ -47,8 +43,6 @@ type
                         is_input: bool,
                         info: ptr ClapNotePortInfo): bool {.cdecl.}
 
-    # ClapHostNotePorts* = ClapHostNotePortsT
-    # ClapHostNotePortsT* = object
     ClapHostNotePorts* = object
         supported_dialects *: proc (host: ptr ClapHost): uint32 {.cdecl.}
         rescan             *: proc (host: ptr ClapHost, flags: uint32): void {.cdecl.}

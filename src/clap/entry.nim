@@ -1,8 +1,6 @@
 import shared, factory
 
 type
-    # ClapPluginEntry* = ClapPluginEntryT
-    # ClapPluginEntryT* = object
     ClapPluginEntry* = object
         clap_version *: ClapVersion
         init         *: proc (plugin_path: cstring): bool {.cdecl.}
